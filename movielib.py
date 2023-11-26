@@ -1,8 +1,16 @@
 """
 movielib
+
+> movielib --download_imdb_data
+> movielib --extract_data <movies rep>
+> movielib --make_pages <movies rep>
+
+Note:
+- when renaming a file, extract_data must be done again
 """
 
 
+import sys
 import os
 import re
 import json
@@ -16,7 +24,6 @@ from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 
 import requests
-import omdb
 import PIL
 from PIL import Image
 from imdb import Cinemagoer
@@ -214,6 +221,7 @@ START = '''\
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <title>%s</title>
+    <link rel="icon" href="Movies-icon.png" />
 <style type="text/css">
     p { margin-top:0px; margin-bottom:10px; }
     span { display:inline-table; width:160px }
@@ -409,13 +417,23 @@ def test2():
 
 
 def main():
-    rep = r'd:\Films'
-    if 0:
+    if len(sys.argv) < 2:
+        print('HELP')
+        sys.exit(-1)
+    elif sys.argv [1] == '--download_imdb_data':
+        # TODO
+        pass
+    elif sys.argv [1] == '--extract_data' and len(sys.argv) == 3:
+        rep = sys.argv[2]
         create_missing_records(rep, 'movie.tsv')
         make_index(rep)
-    else:
+    elif sys.argv [1] == '--make_pages' and len(sys.argv) == 3:
+        rep = sys.argv[2]
         make_main_page(rep)
         make_movie_pages(rep)
+    else:
+        # TODO
+        print('HELP')
 
 
 main()
