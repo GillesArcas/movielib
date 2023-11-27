@@ -15,16 +15,12 @@ import os
 import re
 import json
 import pprint
-import time
-import glob
-import shutil
 import pickle
 import types
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 
 import requests
-import PIL
 from PIL import Image
 from imdb import Cinemagoer
 
@@ -47,7 +43,7 @@ EMPTY = {
 
 def load_movie_tsv(filename):
     # https://developer.imdb.com/non-commercial-datasets/
-    movies = dict()
+    movies = {}
     titles = defaultdict(set)
     with open(filename, encoding='utf-8') as f:
         f.readline()
@@ -72,7 +68,7 @@ def load_movie_tsv(filename):
     return movies, dict(titles)
 
 
-def search_movie_tsv(movies, titles, title, year=None):
+def search_movie_tsv(titles, title, year=None):
     key = title if (year is None) else f'{title}-{year}'
     return titles.get(key.lower(), None)
 
@@ -94,7 +90,7 @@ def movie_gen(rep):
     """
     Find recursively all movies in rep.
     """
-    for dirpath, dirnames, filenames in os.walk(rep):
+    for dirpath, _, filenames in os.walk(rep):
         for filename in filenames:
             barename, ext = os.path.splitext(filename)
             if ext in ('.mp4', '.avi', '.mkv'):
@@ -127,10 +123,10 @@ def create_missing_records(rep, tsvfile):
             match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
             name = match.group(1).strip()
             year = match.group(2)
-            imdb_id = search_movie_tsv(movies, titles, name, year)
+            imdb_id = search_movie_tsv(titles, name, year)
         else:
             name = barename.strip()
-            imdb_id = search_movie_tsv(movies, titles, name)
+            imdb_id = search_movie_tsv(titles, name)
 
         if imdb_id is None:
             print(name, 'not found')
@@ -186,6 +182,10 @@ def create_missing_records(rep, tsvfile):
     print('movie_found', movie_found)
 
 
+def year_title(record):
+    return f"{record['year']}: {record['title']}"
+
+
 def make_index(rep):
     movies = []
     directors = defaultdict(list)
@@ -204,7 +204,7 @@ def make_index(rep):
             movies.append(record)
             director = record['director']
             for _ in director:
-                directors[_].append(f"{record['year']}: {record['title']}")
+                directors[_].append(year_title(record))
 
     with open(os.path.join(rep, 'movies.pickle'), 'wb') as f:
         pickle.dump(movies, f)
@@ -267,7 +267,6 @@ def urlencode(url):
 
 
 def make_movie_element(movie_num, movie_title, movie_name, thumb_name, html_name, thumb_width, descr):
-    # TODO : manque rel="video" et descr
     width, height = Image.open(thumb_name).size
     imgmap = IMGMAP % (
         movie_num,
@@ -283,7 +282,7 @@ def make_movie_element(movie_num, movie_title, movie_name, thumb_name, html_name
         thumb_width,
         movie_title,
         movie_num,
-        'fooofooofoo',
+        'foofoofoo',
         movie_title,
         imgmap
     )
@@ -293,8 +292,6 @@ def make_movie_element(movie_num, movie_title, movie_name, thumb_name, html_name
 def make_main_page(rep):
     with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
         movies = pickle.load(f)
-    with open(os.path.join(rep, 'directors.pickle'), 'rb') as f:
-        directors = pickle.load(f)
 
     # TODO trier dans l'ordre d'insertion (ou un autre ordre pertinent)
     pass
@@ -322,6 +319,17 @@ def make_main_page(rep):
         print(END, file=f)
 
 
+def make_li_list(liste):
+    return '\n'.join([f'<li>{_}</li>' for _ in liste])
+
+
+OTHER_DIRECTOR_MOVIES = '''\
+<h3>Autres films de %s dans la collection</h3>
+ <ul>
+    %s
+</ul>
+'''
+
 def make_movie_pages(rep):
     with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
         movies = pickle.load(f)
@@ -332,30 +340,47 @@ def make_movie_pages(rep):
 
     for record in movies:
         image_basename = record['barename'] + '.jpg'
-        image_name = os.path.join(record['dirpath'], image_basename)
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
+
+        first_director = record['director'][0]
+        other_directors = record['director'][1:]
 
         html = template[:]
         html = html.replace('{{cover}}', image_basename)
         html = html.replace('{{title}}', record['title'])
         html = html.replace('{{year}}', str(record['year']))
-        html = html.replace('{{director}}', ', '.join(record['director']))
+        if other_directors:
+            html = html.replace('{{director}}', make_li_list([first_director, ', '.join(other_directors)]))
+        else:
+            html = html.replace('{{director}}', make_li_list([first_director]))
         html = html.replace('{{runtime}}', str(record['runtime']))
         html = html.replace('{{width}}', str(record['width']))
         html = html.replace('{{height}}', str(record['height']))
         html = html.replace('{{filesize}}', str(record['filesize']))
         html = html.replace('{{cast}}', '\n'.join([f'<li>{_}</li>' for _ in record['cast']]))
 
-        othermovies = [_ for _ in directors[record['director'][0]] if f"{record['year']}: {record['title']}" != _]
-        html = html.replace('{{other_movies}}', '\n'.join([f'<li>{_}</li>' for _ in othermovies]))
+        othermovies1 = [_ for _ in directors[first_director] if year_title(record) != _]
+        othermovies2 = set()
+        for director in other_directors:
+            othermovies2.update([_ for _ in directors[director] if year_title(record) != _])
+        othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
+        othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
+
+        othermovieshtml = [OTHER_DIRECTOR_MOVIES % (first_director, make_li_list(othermovies1))]
+        if other_directors:
+            if len(other_directors) > 1:
+                other_directors = other_directors[:1] + ['etc.']
+            othermovieshtml.append(OTHER_DIRECTOR_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
+
+        html = html.replace('{{other_movies}}', '\n'.join(othermovieshtml))
 
         with open(html_name, 'wt', encoding='utf-8') as f:
             print(html, file=f)
 
 
 def clean(rep):
-    for dirpath, filename, barename in movie_gen(rep):
+    for dirpath, _, barename in movie_gen(rep):
         jsonname = os.path.join(dirpath, barename + '.json')
         imgname = os.path.join(dirpath, barename + '.jpg')
         if os.path.isfile(jsonname) and not os.path.isfile(imgname):
@@ -388,7 +413,7 @@ def test1():
         print(actor.get('name'))
 
     print(movie['cover url'])
-    exit()
+    return
 
     # print the names of the directors of the movie
     print('Directors:')
