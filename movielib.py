@@ -97,6 +97,24 @@ def movie_gen(rep):
                 yield dirpath, filename, barename
 
 
+def get_title(name, moviestsv, imdbmovie):
+    """
+    name: title of movie as extracted from file name
+    moviestsv: dict[tt-id] --> data extracted from tsv file downloaded from imdb
+    imdbmovie: movie object retrieved from imdb
+    """
+    tt_id = 'tt' + imdbmovie.movieID
+    tsvrecord = moviestsv[tt_id]
+    if name == tsvrecord[0]:    # primaryTitle
+        return name
+    elif name == tsvrecord[1]:  # originalTitle
+        return name
+    elif imdbmovie.get('countries')[0] == 'France':
+        return imdbmovie.get('original title')
+    else:
+        return  imdbmovie.get('title')
+
+
 def create_missing_records(rep, tsvfile):
     """
     Find recursively all movies in rep. Create json file (with same name as
@@ -152,10 +170,7 @@ def create_missing_records(rep, tsvfile):
         # set imdb information
         movie = ia.get_movie(imdb_id[2:])
         record['imdb_id'] = movie.movieID
-        if movie.get('countries')[0] == 'France':
-            record['title'] = movie.get('original title')
-        else:
-            record['title'] = movie.get('title')
+        record['title'] = get_title(name, movies, movie)
         record['year'] = movie.get('year')
         record['runtime'] = movie.get('runtimes')[0]
         record['director'] = [_.get('name') for _ in movie.get('director')]
@@ -189,14 +204,14 @@ def year_title(record):
 def make_index(rep):
     movies = []
     directors = defaultdict(list)
-    for index, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
+    for movienum, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
         jsonname = os.path.join(dirpath, barename + '.json')
         if os.path.isfile(jsonname) is False:
             print(jsonname, 'not found')
         else:
             with open(jsonname) as f:
                 record = json.loads(f.read())
-                record['index'] = index
+                record['movienum'] = movienum
                 record['dirpath'] = dirpath
                 record['filename'] = filename
                 record['barename'] = barename
@@ -266,10 +281,27 @@ def urlencode(url):
     return url
 
 
-def make_movie_element(movie_num, movie_title, movie_name, thumb_name, html_name, thumb_width, descr):
+def make_movie_element(rep, record, thumb_width):
+    movie_name = os.path.join(record['dirpath'], record['filename'])
+    image_basename = record['barename'] + '.jpg'
+    image_name = os.path.join(record['dirpath'], image_basename)
+    thumb_basename = galerie.thumbname(image_basename, 'film')
+    thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
+    html_basename = record['barename'] + '.htm'
+    html_name = os.path.join(record['dirpath'], html_basename)
+
+    width, height = Image.open(image_name).size
+    thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
+
+    args = types.SimpleNamespace()
+    args.forcethumb = True
+    galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+
+    descr = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
+
     width, height = Image.open(thumb_name).size
     imgmap = IMGMAP % (
-        movie_num,
+        record['movienum'],
         '%d, %d, %d, %d' % (0, 0, width, height // 3),
         descr,
         '%d, %d, %d, %d' % (0, height // 3, width, 2 * height // 3),
@@ -280,10 +312,10 @@ def make_movie_element(movie_num, movie_title, movie_name, thumb_name, html_name
     movie_element = VIDPOSTCAPTION3 % (
         urlencode(thumb_name[9:]),
         thumb_width,
-        movie_title,
-        movie_num,
+        record['title'],
+        record['movienum'],
         'foofoofoo',
-        movie_title,
+        record['title'],
         imgmap
     )
     return movie_element
@@ -298,24 +330,25 @@ def make_main_page(rep):
 
     with open(os.path.join(rep, 'movies.htm'), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
-        for movie_num, record in enumerate(movies):
-            movie_name = os.path.join(record['dirpath'], record['filename'])
-            image_basename = record['barename'] + '.jpg'
-            image_name = os.path.join(record['dirpath'], image_basename)
-            thumb_basename = galerie.thumbname(image_basename, 'film')
-            thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
-            html_basename = record['barename'] + '.htm'
-            html_name = os.path.join(record['dirpath'], html_basename)
+        for record in movies:
+            print(make_movie_element(rep, record, 160), file=f)
+        print(END, file=f)
 
-            width, height = Image.open(image_name).size
-            thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
 
-            args = types.SimpleNamespace()
-            args.forcethumb = True
-            galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+def make_year_page(rep):
+    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
+        movies = pickle.load(f)
 
-            descr = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
-            print(make_movie_element(movie_num, record['title'], movie_name, thumb_name, html_name, 160, descr), file=f)
+    movies_by_year = defaultdict(list)
+    for record in movies:
+        movies_by_year[record['year']].append(record)
+
+    with open(os.path.join(rep, 'movies_by_year.htm'), 'wt', encoding='utf-8') as f:
+        print(START % 'Films', file=f)
+        for year, records in sorted(movies_by_year.items()):
+            print(f'<h2>{year}</h2>', file=f)
+            for record in records:
+                print(make_movie_element(rep, record, 160), file=f)
         print(END, file=f)
 
 
@@ -388,16 +421,19 @@ def clean(rep):
             os.remove(jsonname)
 
 
-def test1():
+def test():
     # create an instance of the Cinemagoer class
     ia = Cinemagoer()
 
     # get a movie
     # movie = ia.get_movie('0133093')
-    movies = ia.search_movie('Crouching Tiger')
+    movies = ia.search_movie("C'est arrivé près de chez vous")
     movie = movies[0]
     print(movie, movie.movieID)
-    print(repr(movie))
+    print(movie.get('countries'))
+    print(movie.get('original title'))
+    print(movie.get('title'))
+    return
     print(movie.infoset2keys)
 
     movie = ia.get_movie(movie.movieID)
@@ -413,7 +449,7 @@ def test1():
         print(actor.get('name'))
 
     print(movie['cover url'])
-    return
+    # return
 
     # print the names of the directors of the movie
     print('Directors:')
@@ -431,16 +467,6 @@ def test1():
         print(person.personID, person['name'])
 
 
-def test2():
-    # create an instance of the Cinemagoer class
-    ia = Cinemagoer()
-    # omdb.set_default('apikey', '7970510d')
-    print(ia.get_movie_infoset())
-    movie = ia.get_movie('0133093')
-    print(movie.infoset2keys)
-    print(movie.get('cover url'))
-
-
 def main():
     if len(sys.argv) < 2:
         print('HELP')
@@ -456,6 +482,7 @@ def main():
         rep = sys.argv[2]
         make_main_page(rep)
         make_movie_pages(rep)
+        make_year_page(rep)
     else:
         # TODO
         print('HELP')
