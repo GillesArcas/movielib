@@ -17,6 +17,7 @@ import json
 import pprint
 import pickle
 import types
+import shutil
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 
@@ -25,6 +26,11 @@ from PIL import Image
 from imdb import Cinemagoer
 
 import galerie
+
+
+MOVIES_VRAC = 'movies-vrac.htm'
+MOVIES_YEAR = 'movies-year.htm'
+MOVIES_DIRECTOR = 'movies-director.htm'
 
 
 EMPTY = {
@@ -234,13 +240,25 @@ START = '''\
 <html>
 
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <title>%s</title>
-    <link rel="icon" href="Movies-icon.png" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>%s</title>
+<link rel="icon" href="Movies-icon.png" />
 <style type="text/css">
-    p { margin-top:0px; margin-bottom:10px; }
-    span { display:inline-table; width:160px }
- </style>\
+p {
+  margin-top:0px;
+  margin-bottom:10px;
+}
+span {
+  display:inline-table;
+  width:160px
+}
+h2 {
+  padding: 4px;
+  line-height: 12px;
+  border-top: 2px solid grey;
+  border-bottom: 2px solid grey;
+}
+</style>\
 </head>
 
 <body>
@@ -321,14 +339,11 @@ def make_movie_element(rep, record, thumb_width):
     return movie_element
 
 
-def make_main_page(rep):
+def make_vrac_page(rep):
     with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
         movies = pickle.load(f)
 
-    # TODO trier dans l'ordre d'insertion (ou un autre ordre pertinent)
-    pass
-
-    with open(os.path.join(rep, 'movies.htm'), 'wt', encoding='utf-8') as f:
+    with open(os.path.join(rep, MOVIES_VRAC), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
         for record in movies:
             print(make_movie_element(rep, record, 160), file=f)
@@ -343,13 +358,38 @@ def make_year_page(rep):
     for record in movies:
         movies_by_year[record['year']].append(record)
 
-    with open(os.path.join(rep, 'movies_by_year.htm'), 'wt', encoding='utf-8') as f:
+    with open(os.path.join(rep, MOVIES_YEAR), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
         for year, records in sorted(movies_by_year.items()):
             print(f'<h2>{year}</h2>', file=f)
             for record in records:
                 print(make_movie_element(rep, record, 160), file=f)
         print(END, file=f)
+
+
+def make_director_page(rep):
+    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
+        movies = pickle.load(f)
+
+    movies_by_director = defaultdict(list)
+    for record in movies:
+        for director in record['director']:
+            movies_by_director[director].append(record)
+
+    with open(os.path.join(rep, MOVIES_DIRECTOR), 'wt', encoding='utf-8') as f:
+        print(START % 'Films', file=f)
+        for director, records in sorted(movies_by_director.items()):
+            print(f'<h2> {director}</h2>', file=f)
+            for record in records:
+                print(make_movie_element(rep, record, 160), file=f)
+        print(END, file=f)
+
+
+def make_main_page(rep):
+    make_vrac_page(rep)
+    make_year_page(rep)
+    make_director_page(rep)
+    shutil.copy('movies.htm', rep)
 
 
 def make_li_list(liste):
@@ -482,7 +522,6 @@ def main():
         rep = sys.argv[2]
         make_main_page(rep)
         make_movie_pages(rep)
-        make_year_page(rep)
     else:
         # TODO
         print('HELP')
