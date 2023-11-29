@@ -40,11 +40,19 @@
 function show_vrac() {
     document.getElementById("div_vrac").style.display = "block";
     document.getElementById("div_year").style.display = "none";
+    document.getElementById("div_director").style.display = "none";
 }
 
 function show_year() {
     document.getElementById("div_vrac").style.display = "none";
     document.getElementById("div_year").style.display = "block";
+    document.getElementById("div_director").style.display = "none";
+}
+
+function show_director() {
+    document.getElementById("div_vrac").style.display = "none";
+    document.getElementById("div_year").style.display = "none";
+    document.getElementById("div_director").style.display = "block";
 }
 
 function resizeIframe(iframe) {
@@ -62,11 +70,13 @@ window.onload = show_vrac;
   <div class="dropdown-content">
   <a href="javascript:show_vrac()">Vrac</a>
   <a href="javascript:show_year()">Tri par année</a>
+  <a href="javascript:show_director()">Tri par metteur en scène</a>
   </div>
 </div>
 
-<iframe id="div_vrac" src="movies.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
-<iframe id="div_year" src="movies_by_year.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
+<iframe id="div_vrac" src="movies_vrac.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
+<iframe id="div_year" src="movies_year.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
+<iframe id="div_director" src="movies_director.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
 
 </body>
 </html>
