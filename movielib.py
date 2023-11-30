@@ -39,7 +39,6 @@ EMPTY = {
     'year': None,
     'director': None,
     'cast': None,
-    'cover_url': None,
     'runtime': None,
     'filesize': None,
     'width': None,
@@ -181,7 +180,6 @@ def create_missing_records(rep, tsvfile, force=False):
         record['runtime'] = movie.get('runtimes')[0]
         record['director'] = [_.get('name') for _ in movie.get('director')]
         record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
-        record['cover_url'] = movie.get('cover url')
 
         # save record
         jsonname = os.path.join(dirpath, barename + '.json')
@@ -191,7 +189,7 @@ def create_missing_records(rep, tsvfile, force=False):
         # load movie cover
         imgname = os.path.join(dirpath, barename + '.jpg')
         if os.path.isfile(imgname) is False:
-            imgdata = requests.get(record['cover_url']).content
+            imgdata = requests.get(movie.get('cover url')).content
             with open(imgname, 'wb') as handler:
                 handler.write(imgdata)
 
@@ -244,6 +242,9 @@ START = '''\
 <title>%s</title>
 <link rel="icon" href="Movies-icon.png" />
 <style type="text/css">
+body {
+  font: normal 14px Verdana, Arial, sans-serif;
+}
 p {
   margin-top:0px;
   margin-bottom:10px;
