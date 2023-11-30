@@ -1,12 +1,13 @@
 """
 movielib
 
-> movielib --download_imdb_data
+> movielib --extract_movie_tsv
 > movielib --extract_data <movies rep>
 > movielib --make_pages <movies rep>
 
 Note:
-- when renaming a file, extract_data must be done again
+- when renaming a movie related file (directory, mp4, etc), extract_data must be
+  done again.
 """
 
 
@@ -18,6 +19,7 @@ import pprint
 import pickle
 import types
 import shutil
+import gzip
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 
@@ -28,6 +30,7 @@ from imdb import Cinemagoer
 import galerie
 
 
+MOVIE_TSV_FN = 'movie.tsv'
 MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
 MOVIES_ALPHA = 'movies-alpha.htm'
@@ -47,11 +50,30 @@ EMPTY = {
 }
 
 
-def load_movie_tsv(filename):
-    # https://developer.imdb.com/non-commercial-datasets/
+def extract_movie_tsv(movie_tsv_filename):
+    """
+    Assume that the file title.basics.tsv.gz has been downloaded from
+    https://developer.imdb.com/non-commercial-datasets/ and that it contains
+    the file data.tsv.
+    """
+    with gzip.open('title.basics.tsv.gz', 'rb') as f_in:
+        with open('data.tsv', 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+    with open('data.tsv', encoding='utf-8') as f:
+        with open(movie_tsv_filename, 'wt', encoding='utf-8') as g:
+            print(f.readline(), file=g)
+            for line in f:
+                if '\tmovie\t' in line:
+                    print(line, end='', file=g)
+
+    os.remove('data.tsv')
+
+
+def load_movie_tsv(movie_tsv_filename):
     movies = {}
     titles = defaultdict(set)
-    with open(filename, encoding='utf-8') as f:
+    with open(movie_tsv_filename, encoding='utf-8') as f:
         f.readline()
         for line in f:
             tconst, _, primary_title, original_title, _, year, _, runtime_minutes, genres = line.split('\t')
@@ -522,9 +544,8 @@ def main():
     if len(sys.argv) < 2:
         print('HELP')
         sys.exit(-1)
-    elif sys.argv [1] == '--download_imdb_data':
-        # TODO
-        pass
+    elif sys.argv [1] == '--extract_movie_tsv' and len(sys.argv) == 2:
+        extract_movie_tsv(MOVIE_TSV_FN)
     elif sys.argv [1] == '--extract_data' and len(sys.argv) == 3:
         rep = sys.argv[2]
         create_missing_records(rep, 'movie.tsv', force=True)
