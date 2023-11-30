@@ -30,6 +30,7 @@ import galerie
 
 MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
+MOVIES_ALPHA = 'movies-alpha.htm'
 MOVIES_DIRECTOR = 'movies-director.htm'
 
 
@@ -359,6 +360,23 @@ def make_year_page(rep, forcethumb):
         print(END, file=f)
 
 
+def make_alpha_page(rep, forcethumb):
+    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
+        movies = pickle.load(f)
+
+    movies_by_alpha = defaultdict(list)
+    for record in movies:
+        movies_by_alpha[record['title'][0].upper()].append(record)
+
+    with open(os.path.join(rep, MOVIES_ALPHA), 'wt', encoding='utf-8') as f:
+        print(START % 'Films', file=f)
+        for char, records in sorted(movies_by_alpha.items()):
+            print(f'<h2>{char}</h2>', file=f)
+            for record in records:
+                print(make_movie_element(rep, record, 160, forcethumb), file=f)
+        print(END, file=f)
+
+
 def make_director_page(rep, forcethumb):
     with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
         movies = pickle.load(f)
@@ -380,6 +398,7 @@ def make_director_page(rep, forcethumb):
 def make_main_page(rep):
     make_vrac_page(rep, forcethumb=True)
     make_year_page(rep, forcethumb=False)
+    make_alpha_page(rep, forcethumb=False)
     make_director_page(rep, forcethumb=False)
     shutil.copy('movies.htm', rep)
 
