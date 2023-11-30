@@ -121,7 +121,7 @@ def get_title(name, moviestsv, imdbmovie):
         return  imdbmovie.get('title')
 
 
-def create_missing_records(rep, tsvfile):
+def create_missing_records(rep, tsvfile, force=False):
     """
     Find recursively all movies in rep. Create json file (with same name as
     movie) if absent. Fill record with imdb data if imdb id can be found, plus
@@ -139,7 +139,7 @@ def create_missing_records(rep, tsvfile):
         movie_number += 1
 
         jsonname = os.path.join(dirpath, barename + '.json')
-        if os.path.isfile(jsonname):
+        if os.path.isfile(jsonname) and force is False:
             continue
         new_movie_number += 1
 
@@ -268,18 +268,6 @@ h2 {
 END = '</div>\n</body>\n</html>'
 VIDPOSTCAPTION = '''\
 <span>
-<a href="%s" rel="video"><img src=%s width="%d" height="%d" title="%s"/></a>
-<p>%s</p>
-</span>
-'''
-VIDPOSTCAPTION2 = '''\
-<span>
-<a href="%s" rel="video"><img src=%s width="%d" title="%s"/></a>
-<p>%s</p>
-</span>
-'''
-VIDPOSTCAPTION3 = '''\
-<span>
 <img src="%s" width="%d" alt="%s cover" usemap="#workmap%d" title="%s">
 <p>%s</p>
 </span>
@@ -330,7 +318,7 @@ def make_movie_element(rep, record, thumb_width, forcethumb):
         '%d, %d, %d, %d' % (0, int(round(2 * height / 3)), width - 1, height - 1),
         urlencode(movie_name[9:])
     )
-    movie_element = VIDPOSTCAPTION3 % (
+    movie_element = VIDPOSTCAPTION % (
         urlencode(thumb_name[9:]),
         thumb_width,
         record['title'],
@@ -469,15 +457,15 @@ def test():
     ia = Cinemagoer()
 
     # get a movie
-    # movie = ia.get_movie('0133093')
-    movies = ia.search_movie("C'est arrivé près de chez vous")
-    movie = movies[0]
+    movie = ia.get_movie('0133093')
+    # movies = ia.search_movie("C'est arrivé près de chez vous")
+    # movie = movies[0]
     print(movie, movie.movieID)
     print(movie.get('countries'))
     print(movie.get('original title'))
     print(movie.get('title'))
-    return
     print(movie.infoset2keys)
+    return
 
     movie = ia.get_movie(movie.movieID)
     print(repr(movie))
@@ -519,12 +507,14 @@ def main():
         pass
     elif sys.argv [1] == '--extract_data' and len(sys.argv) == 3:
         rep = sys.argv[2]
-        create_missing_records(rep, 'movie.tsv')
+        create_missing_records(rep, 'movie.tsv', force=True)
         make_index(rep)
     elif sys.argv [1] == '--make_pages' and len(sys.argv) == 3:
         rep = sys.argv[2]
         make_main_page(rep)
         make_movie_pages(rep)
+    elif sys.argv [1] == '--test' and len(sys.argv) == 2:
+        test()
     else:
         # TODO
         print('HELP')
