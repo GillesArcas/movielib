@@ -259,6 +259,7 @@ h2 {
   border-bottom: 2px solid grey;
 }
 </style>\
+<base target="_parent"></base>
 </head>
 
 <body>
@@ -299,7 +300,7 @@ def urlencode(url):
     return url
 
 
-def make_movie_element(rep, record, thumb_width):
+def make_movie_element(rep, record, thumb_width, forcethumb):
     movie_name = os.path.join(record['dirpath'], record['filename'])
     image_basename = record['barename'] + '.jpg'
     image_name = os.path.join(record['dirpath'], image_basename)
@@ -312,19 +313,21 @@ def make_movie_element(rep, record, thumb_width):
     thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
 
     args = types.SimpleNamespace()
-    args.forcethumb = True
+    args.forcethumb = forcethumb
     galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
 
     descr = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
 
     width, height = Image.open(thumb_name).size
+    height = int(round(160.0 * height / width))
+    width = 160
     imgmap = IMGMAP % (
         record['movienum'],
-        '%d, %d, %d, %d' % (0, 0, width, height // 3),
+        '%d, %d, %d, %d' % (0, 0, width - 1, int(round(height / 3))),
         descr,
-        '%d, %d, %d, %d' % (0, height // 3, width, 2 * height // 3),
+        '%d, %d, %d, %d' % (0, int(round(height / 3)), width - 1, int(round(2 * height / 3))),
         urlencode(html_name[9:]),
-        '%d, %d, %d, %d' % (0, 2 * height // 3, width, height),
+        '%d, %d, %d, %d' % (0, int(round(2 * height / 3)), width - 1, height - 1),
         urlencode(movie_name[9:])
     )
     movie_element = VIDPOSTCAPTION3 % (
@@ -339,18 +342,18 @@ def make_movie_element(rep, record, thumb_width):
     return movie_element
 
 
-def make_vrac_page(rep):
+def make_vrac_page(rep, forcethumb):
     with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
         movies = pickle.load(f)
 
     with open(os.path.join(rep, MOVIES_VRAC), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
         for record in movies:
-            print(make_movie_element(rep, record, 160), file=f)
+            print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
 
 
-def make_year_page(rep):
+def make_year_page(rep, forcethumb):
     with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
         movies = pickle.load(f)
 
@@ -363,11 +366,11 @@ def make_year_page(rep):
         for year, records in sorted(movies_by_year.items()):
             print(f'<h2>{year}</h2>', file=f)
             for record in records:
-                print(make_movie_element(rep, record, 160), file=f)
+                print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
 
 
-def make_director_page(rep):
+def make_director_page(rep, forcethumb):
     with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
         movies = pickle.load(f)
 
@@ -381,14 +384,14 @@ def make_director_page(rep):
         for director, records in sorted(movies_by_director.items()):
             print(f'<h2> {director}</h2>', file=f)
             for record in records:
-                print(make_movie_element(rep, record, 160), file=f)
+                print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
 
 
 def make_main_page(rep):
-    make_vrac_page(rep)
-    make_year_page(rep)
-    make_director_page(rep)
+    make_vrac_page(rep, forcethumb=True)
+    make_year_page(rep, forcethumb=False)
+    make_director_page(rep, forcethumb=False)
     shutil.copy('movies.htm', rep)
 
 
