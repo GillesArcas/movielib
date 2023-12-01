@@ -1,6 +1,4 @@
 """
-movielib
-
 > movielib --extract_movie_tsv
 > movielib --extract_data <movies rep>
 > movielib --make_pages <movies rep>
@@ -11,7 +9,6 @@ Note:
 """
 
 
-import sys
 import os
 import re
 import json
@@ -20,6 +17,8 @@ import pickle
 import types
 import shutil
 import gzip
+import argparse
+from datetime import datetime
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 
@@ -143,7 +142,7 @@ def get_title(name, moviestsv, imdbmovie):
         return  imdbmovie.get('title')
 
 
-def create_missing_records(rep, tsvfile, force=False):
+def create_missing_records(rep, tsvfile, forcejson=False):
     """
     Find recursively all movies in rep. Create json file (with same name as
     movie) if absent. Fill record with imdb data if imdb id can be found, plus
@@ -161,7 +160,7 @@ def create_missing_records(rep, tsvfile, force=False):
         movie_number += 1
 
         jsonname = os.path.join(dirpath, barename + '.json')
-        if os.path.isfile(jsonname) and force is False:
+        if os.path.isfile(jsonname) and forcejson is False:
             continue
         new_movie_number += 1
 
@@ -212,7 +211,7 @@ def create_missing_records(rep, tsvfile, force=False):
         # load movie cover
         imgname = os.path.join(dirpath, barename + '.jpg')
         if os.path.isfile(imgname) is False:
-            imgdata = requests.get(movie.get('cover url')).content
+            imgdata = requests.get(movie.get('cover url'), timeout=10).content
             with open(imgname, 'wb') as handler:
                 handler.write(imgdata)
 
@@ -292,7 +291,7 @@ h2 {
 END = '</div>\n</body>\n</html>'
 VIDPOSTCAPTION = '''\
 <span>
-<img src="%s" width="%d" alt="%s cover" usemap="#workmap%d" title="%s">
+<img src="%s" width="%d" alt="%s cover" usemap="#workmap%d">
 <p>%s</p>
 </span>
 %s
@@ -312,7 +311,16 @@ def urlencode(url):
     return url
 
 
-def make_movie_element(rep, record, thumb_width, forcethumb):
+def time_ordered(fn1, fn2):
+    """
+    Check if two files are time ordered.
+    """
+    t1 = os.path.getmtime(fn1)
+    t2 = os.path.getmtime(fn2)
+    return datetime.fromtimestamp(t1).date() < datetime.fromtimestamp(t2).date()
+
+
+def make_movie_element(rep, record, thumb_width, forcethumb=False):
     movie_name = os.path.join(record['dirpath'], record['filename'])
     image_basename = record['barename'] + '.jpg'
     image_name = os.path.join(record['dirpath'], image_basename)
@@ -321,12 +329,12 @@ def make_movie_element(rep, record, thumb_width, forcethumb):
     html_basename = record['barename'] + '.htm'
     html_name = os.path.join(record['dirpath'], html_basename)
 
-    width, height = Image.open(image_name).size
-    thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
-
-    args = types.SimpleNamespace()
-    args.forcethumb = forcethumb
-    galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+    if forcethumb or os.path.isfile(thumb_name) is False or time_ordered(image_name, thumb_name) is False:
+        width, height = Image.open(image_name).size
+        thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
+        args = types.SimpleNamespace()
+        args.forcethumb = True
+        galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
 
     descr = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
 
@@ -347,7 +355,6 @@ def make_movie_element(rep, record, thumb_width, forcethumb):
         thumb_width,
         record['title'],
         record['movienum'],
-        'foofoofoo',
         record['title'],
         imgmap
     )
@@ -417,8 +424,8 @@ def make_director_page(rep, forcethumb):
         print(END, file=f)
 
 
-def make_main_page(rep):
-    make_vrac_page(rep, forcethumb=True)
+def make_main_page(rep, forcethumb):
+    make_vrac_page(rep, forcethumb=forcethumb)
     make_year_page(rep, forcethumb=False)
     make_alpha_page(rep, forcethumb=False)
     make_director_page(rep, forcethumb=False)
@@ -507,32 +514,6 @@ def test():
     print(movie.get('original title'))
     print(movie.get('title'))
     print(movie.infoset2keys)
-    return
-
-    movie = ia.get_movie(movie.movieID)
-    print(repr(movie))
-    print(movie.infoset2keys)
-
-    print(movie.get('year'))
-    director = movie.get('director')[0]
-    print(director)
-    print(director.get('name'))
-    print(movie.get('plot'))
-    for actor in movie.get('cast'):
-        print(actor.get('name'))
-
-    print(movie['cover url'])
-    # return
-
-    # print the names of the directors of the movie
-    print('Directors:')
-    for director in movie['directors']:
-        print(director['name'])
-
-    # print the genres of the movie
-    print('Genres:')
-    for genre in movie['genres']:
-        print(genre)
 
     # search for a person name
     people = ia.search_person('Mel Gibson')
@@ -540,25 +521,37 @@ def test():
         print(person.personID, person['name'])
 
 
+def parse_command_line():
+    parser = argparse.ArgumentParser(add_help=True, usage=__doc__)
+    xgroup = parser.add_mutually_exclusive_group()
+    xgroup.add_argument('--extract_movie_tsv', action='store_true', default=False)
+    xgroup.add_argument('--extract_data', action='store', metavar='<movies rep>')
+    xgroup.add_argument('--make_pages', action='store', metavar='<movies rep>')
+    xgroup.add_argument('--test', action='store_true')
+    parser.add_argument('--force_json', action='store_true', default=False)
+    parser.add_argument('--force_thumb', action='store_true', default=False)
+    args = parser.parse_args()
+    if args.extract_data:
+        args.rep = args.extract_data
+    if args.make_pages:
+        args.rep = args.make_pages
+    return parser, args
+
+
 def main():
-    if len(sys.argv) < 2:
-        print('HELP')
-        sys.exit(-1)
-    elif sys.argv [1] == '--extract_movie_tsv' and len(sys.argv) == 2:
+    parser, args = parse_command_line()
+    if args.extract_movie_tsv:
         extract_movie_tsv(MOVIE_TSV_FN)
-    elif sys.argv [1] == '--extract_data' and len(sys.argv) == 3:
-        rep = sys.argv[2]
-        create_missing_records(rep, 'movie.tsv', force=True)
-        make_index(rep)
-    elif sys.argv [1] == '--make_pages' and len(sys.argv) == 3:
-        rep = sys.argv[2]
-        make_main_page(rep)
-        make_movie_pages(rep)
-    elif sys.argv [1] == '--test' and len(sys.argv) == 2:
+    elif args.extract_data:
+        create_missing_records(args.rep, 'movie.tsv', args.force_json)
+        make_index(args.rep)
+    elif args.make_pages:
+        make_main_page(args.make_pages, args.force_thumb)
+        make_movie_pages(args.rep)
+    elif args.test:
         test()
     else:
-        # TODO
-        print('HELP')
+        parser.print_help()
 
 
 main()
