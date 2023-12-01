@@ -2,6 +2,7 @@
 > movielib --extract_movie_tsv
 > movielib --extract_data <movies rep>
 > movielib --make_pages <movies rep>
+> movielib --update <movies rep>
 
 Note:
 - when renaming a movie related file (directory, mp4, etc), extract_data must be
@@ -142,6 +143,29 @@ def get_title(name, moviestsv, imdbmovie):
         return  imdbmovie.get('title')
 
 
+def create_record(dirpath, filename, name, movies, ia, imdb_id):
+    record = EMPTY.copy()
+
+    # set size
+    record['filesize'] = os.path.getsize(os.path.join(dirpath, filename))
+
+    # set dimensions
+    width, height = get_dimensions(os.path.join(dirpath, filename))
+    record['width'] = width
+    record['height'] = height
+
+    # set imdb information
+    movie = ia.get_movie(imdb_id[2:])
+    record['imdb_id'] = movie.movieID
+    record['title'] = get_title(name, movies, movie)
+    record['year'] = movie.get('year')
+    record['runtime'] = movie.get('runtimes')[0]
+    record['director'] = [_.get('name') for _ in movie.get('director')]
+    record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
+
+    return record
+
+
 def create_missing_records(rep, tsvfile, forcejson=False):
     """
     Find recursively all movies in rep. Create json file (with same name as
@@ -184,31 +208,32 @@ def create_missing_records(rep, tsvfile, forcejson=False):
             imdb_id = list(imdb_id)[0]
 
         movie_found += 1
-        record = EMPTY.copy()
-
-        # set size
-        record['filesize'] = os.path.getsize(os.path.join(dirpath, filename))
-
-        # set dimensions
-        width, height = get_dimensions(os.path.join(dirpath, filename))
-        record['width'] = width
-        record['height'] = height
-
-        # set imdb information
-        movie = ia.get_movie(imdb_id[2:])
-        record['imdb_id'] = movie.movieID
-        record['title'] = get_title(name, movies, movie)
-        record['year'] = movie.get('year')
-        record['runtime'] = movie.get('runtimes')[0]
-        record['director'] = [_.get('name') for _ in movie.get('director')]
-        record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
+        record = create_record(dirpath, filename, name, movies, ia, imdb_id)
+        #record = EMPTY.copy()
+        #
+        ## set size
+        #record['filesize'] = os.path.getsize(os.path.join(dirpath, filename))
+        #
+        ## set dimensions
+        #width, height = get_dimensions(os.path.join(dirpath, filename))
+        #record['width'] = width
+        #record['height'] = height
+        #
+        ## set imdb information
+        #movie = ia.get_movie(imdb_id[2:])
+        #record['imdb_id'] = movie.movieID
+        #record['title'] = get_title(name, movies, movie)
+        #record['year'] = movie.get('year')
+        #record['runtime'] = movie.get('runtimes')[0]
+        #record['director'] = [_.get('name') for _ in movie.get('director')]
+        #record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
 
         # save record
         jsonname = os.path.join(dirpath, barename + '.json')
         with open(jsonname, 'w') as f:
             json.dump(record, f, indent=4)
 
-        # load movie cover
+        # load default movie cover
         imgname = os.path.join(dirpath, barename + '.jpg')
         if os.path.isfile(imgname) is False:
             imgdata = requests.get(movie.get('cover url'), timeout=10).content
@@ -527,6 +552,7 @@ def parse_command_line():
     xgroup.add_argument('--extract_movie_tsv', action='store_true', default=False)
     xgroup.add_argument('--extract_data', action='store', metavar='<movies rep>')
     xgroup.add_argument('--make_pages', action='store', metavar='<movies rep>')
+    xgroup.add_argument('--update', action='store', metavar='<movies rep>')
     xgroup.add_argument('--test', action='store_true')
     parser.add_argument('--force_json', action='store_true', default=False)
     parser.add_argument('--force_thumb', action='store_true', default=False)
@@ -535,6 +561,8 @@ def parse_command_line():
         args.rep = args.extract_data
     if args.make_pages:
         args.rep = args.make_pages
+    if args.update:
+        args.rep = args.update
     return parser, args
 
 
@@ -546,7 +574,12 @@ def main():
         create_missing_records(args.rep, 'movie.tsv', args.force_json)
         make_index(args.rep)
     elif args.make_pages:
-        make_main_page(args.make_pages, args.force_thumb)
+        make_main_page(args.rep, args.force_thumb)
+        make_movie_pages(args.rep)
+    elif args.update:
+        create_missing_records(args.rep, 'movie.tsv', args.force_json)
+        make_index(args.rep)
+        make_main_page(args.rep, args.force_thumb)
         make_movie_pages(args.rep)
     elif args.test:
         test()
