@@ -41,8 +41,8 @@ EMPTY = {
     'imdb_id': None,
     'title': None,
     'year': None,
-    'director': None,
-    'cast': None,
+    'director': [],
+    'cast': [],
     'runtime': None,
     'filesize': None,
     'width': None,
@@ -103,7 +103,7 @@ def search_movie_tsv(titles, title, year=None):
 
 def get_dimensions(filename):
     # ffmpeg must be in path
-    command = 'ffprobe -v error -select_streams v:0 -show_entries stream=height,width -of csv=s=x:p=0 "' + filename + '"'
+    command = f'ffprobe -v error -select_streams v:0 -show_entries stream=height,width -of csv=s=x:p=0 "{filename}"'
 
     try:
         output = check_output(command, stderr=STDOUT).decode()
@@ -112,6 +112,26 @@ def get_dimensions(filename):
     except CalledProcessError as e:
         output = e.output.decode()
         return None, None
+
+
+def get_duration(filename):
+    # ffmpeg must be in path
+    command = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{filename}"'
+    try:
+        output = check_output(command, stderr=STDOUT).decode()
+        output = output.splitlines()[0]
+        return int(float(output) / 60.0)
+    except CalledProcessError as e:
+        output = e.output.decode()
+        return 'undefined'
+
+
+def extract_image_from_movie(filename, imagename, size, delay):
+    # ffmpeg must be in path
+    sizearg = '%dx%d' % (size, size)
+    command = 'ffmpeg -y -v error -itsoffset -%d -i "%s" -vcodec mjpeg -vframes 1 -an -f rawvideo -s %s "%s"'
+    command = command % (delay, filename, sizearg, imagename)
+    result = os.system(command)
 
 
 def movie_gen(rep):
@@ -143,14 +163,36 @@ def get_title(name, moviestsv, imdbmovie):
         return  imdbmovie.get('title')
 
 
-def create_record(dirpath, filename, name, movies, ia, imdb_id):
+def create_minimal_record(dirpath, filename, name, year, movies, ia):
     record = EMPTY.copy()
+    fullname = os.path.join(dirpath, filename)
+
+    # set title and year found in filename
+    record['title'] = name
+    record['year'] = year
 
     # set size
-    record['filesize'] = os.path.getsize(os.path.join(dirpath, filename))
+    record['filesize'] = os.path.getsize(fullname)
 
     # set dimensions
-    width, height = get_dimensions(os.path.join(dirpath, filename))
+    width, height = get_dimensions(fullname)
+    record['width'] = width
+    record['height'] = height
+
+    # set duration
+    record['runtime'] = get_duration(fullname)
+    return record
+
+
+def create_record(dirpath, filename, name, movies, ia, imdb_id):
+    record = EMPTY.copy()
+    fullname = os.path.join(dirpath, filename)
+
+    # set size
+    record['filesize'] = os.path.getsize(fullname)
+
+    # set dimensions
+    width, height = get_dimensions(fullname)
     record['width'] = width
     record['height'] = height
 
@@ -162,6 +204,13 @@ def create_record(dirpath, filename, name, movies, ia, imdb_id):
     record['runtime'] = movie.get('runtimes')[0]
     record['director'] = [_.get('name') for _ in movie.get('director')]
     record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
+
+    # load default movie cover
+    imgname = os.path.splitext(fullname)[0] + '.jpg'
+    if os.path.isfile(imgname) is False:
+        imgdata = requests.get(movie.get('cover url'), timeout=10).content
+        with open(imgname, 'wb') as handler:
+            handler.write(imgdata)
 
     return record
 
@@ -191,54 +240,35 @@ def create_missing_records(rep, tsvfile, forcejson=False):
         if re.search(r'\(\d\d\d\d\)\s*$', barename):
             match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
             name = match.group(1).strip()
-            year = match.group(2)
+            year = int(match.group(2))
             imdb_id = search_movie_tsv(titles, name, year)
         else:
             name = barename.strip()
+            year = 9999
             imdb_id = search_movie_tsv(titles, name)
 
-        if imdb_id is None:
-            print(name, 'not found')
-            continue
-        elif len(imdb_id) > 1:
+        if imdb_id and len(imdb_id) > 1:
             print(name, 'ambiguous', imdb_id)
             continue
+        elif imdb_id is None:
+            print(name, 'not found in imdb')
+            record = create_minimal_record(dirpath, filename, name, year, movies, ia)
         else:
             # movie found
             imdb_id = list(imdb_id)[0]
-
-        movie_found += 1
-        record = create_record(dirpath, filename, name, movies, ia, imdb_id)
-        #record = EMPTY.copy()
-        #
-        ## set size
-        #record['filesize'] = os.path.getsize(os.path.join(dirpath, filename))
-        #
-        ## set dimensions
-        #width, height = get_dimensions(os.path.join(dirpath, filename))
-        #record['width'] = width
-        #record['height'] = height
-        #
-        ## set imdb information
-        #movie = ia.get_movie(imdb_id[2:])
-        #record['imdb_id'] = movie.movieID
-        #record['title'] = get_title(name, movies, movie)
-        #record['year'] = movie.get('year')
-        #record['runtime'] = movie.get('runtimes')[0]
-        #record['director'] = [_.get('name') for _ in movie.get('director')]
-        #record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
+            movie_found += 1
+            record = create_record(dirpath, filename, name, movies, ia, imdb_id)
 
         # save record
         jsonname = os.path.join(dirpath, barename + '.json')
         with open(jsonname, 'w') as f:
             json.dump(record, f, indent=4)
 
-        # load default movie cover
-        imgname = os.path.join(dirpath, barename + '.jpg')
-        if os.path.isfile(imgname) is False:
-            imgdata = requests.get(movie.get('cover url'), timeout=10).content
-            with open(imgname, 'wb') as handler:
-                handler.write(imgdata)
+        # create default image if absent
+        moviename = os.path.join(dirpath, filename)
+        imagename = os.path.join(dirpath, barename + '.jpg')
+        if os.path.isfile(imagename) is False:
+            extract_image_from_movie(moviename, imagename, size=300, delay=60)
 
         pprint.pprint(record)
         print()
@@ -340,9 +370,7 @@ def time_ordered(fn1, fn2):
     """
     Check if two files are time ordered.
     """
-    t1 = os.path.getmtime(fn1)
-    t2 = os.path.getmtime(fn2)
-    return datetime.fromtimestamp(t1).date() < datetime.fromtimestamp(t2).date()
+    return os.path.getmtime(fn1) < os.path.getmtime(fn2)
 
 
 def make_movie_element(rep, record, thumb_width, forcethumb=False):
@@ -355,26 +383,33 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
     html_name = os.path.join(record['dirpath'], html_basename)
 
     if forcethumb or os.path.isfile(thumb_name) is False or time_ordered(image_name, thumb_name) is False:
-        width, height = Image.open(image_name).size
-        thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
         args = types.SimpleNamespace()
         args.forcethumb = True
-        galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+        if os.path.isfile(image_name):
+            width, height = Image.open(image_name).size
+            thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
+            galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+        else:
+            print('Warning: no image for', movie_name)
 
     descr = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
 
-    width, height = Image.open(thumb_name).size
-    height = int(round(160.0 * height / width))
-    width = 160
-    imgmap = IMGMAP % (
-        record['movienum'],
-        '%d, %d, %d, %d' % (0, 0, width - 1, int(round(height / 3))),
-        descr,
-        '%d, %d, %d, %d' % (0, int(round(height / 3)), width - 1, int(round(2 * height / 3))),
-        urlencode(html_name[9:]),
-        '%d, %d, %d, %d' % (0, int(round(2 * height / 3)), width - 1, height - 1),
-        urlencode(movie_name[9:])
-    )
+    if os.path.isfile(thumb_name):
+        width, height = Image.open(thumb_name).size
+        height = int(round(160.0 * height / width))
+        width = 160
+        imgmap = IMGMAP % (
+            record['movienum'],
+            '%d, %d, %d, %d' % (0, 0, width - 1, int(round(height / 3))),
+            descr,
+            '%d, %d, %d, %d' % (0, int(round(height / 3)), width - 1, int(round(2 * height / 3))),
+            urlencode(html_name[9:]),
+            '%d, %d, %d, %d' % (0, int(round(2 * height / 3)), width - 1, height - 1),
+            urlencode(movie_name[9:])
+        )
+    else:
+        imgmap = ''
+
     movie_element = VIDPOSTCAPTION % (
         urlencode(thumb_name[9:]),
         thumb_width,
@@ -481,37 +516,41 @@ def make_movie_pages(rep):
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
 
-        first_director = record['director'][0]
-        other_directors = record['director'][1:]
-
         html = template[:]
         html = html.replace('{{cover}}', image_basename)
         html = html.replace('{{title}}', record['title'])
         html = html.replace('{{year}}', str(record['year']))
-        if other_directors:
-            html = html.replace('{{director}}', make_li_list([first_director, ', '.join(other_directors)]))
-        else:
-            html = html.replace('{{director}}', make_li_list([first_director]))
         html = html.replace('{{runtime}}', str(record['runtime']))
         html = html.replace('{{width}}', str(record['width']))
         html = html.replace('{{height}}', str(record['height']))
         html = html.replace('{{filesize}}', str(record['filesize']))
-        html = html.replace('{{cast}}', '\n'.join([f'<li>{_}</li>' for _ in record['cast']]))
+        html = html.replace('{{cast}}', make_li_list(record['cast'] if record['cast'] else ['Non renseigné']))
 
-        othermovies1 = [_ for _ in directors[first_director] if year_title(record) != _]
-        othermovies2 = set()
-        for director in other_directors:
-            othermovies2.update([_ for _ in directors[director] if year_title(record) != _])
-        othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
-        othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
+        if record['director']:
+            first_director = record['director'][0]
+            other_directors = record['director'][1:]
+            if other_directors:
+                html = html.replace('{{director}}', make_li_list([first_director, ', '.join(other_directors)]))
+            else:
+                html = html.replace('{{director}}', make_li_list([first_director]))
 
-        othermovieshtml = [OTHER_DIRECTOR_MOVIES % (first_director, make_li_list(othermovies1))]
-        if other_directors:
-            if len(other_directors) > 1:
-                other_directors = other_directors[:1] + ['etc.']
-            othermovieshtml.append(OTHER_DIRECTOR_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
+            othermovies1 = [_ for _ in directors[first_director] if year_title(record) != _]
+            othermovies2 = set()
+            for director in other_directors:
+                othermovies2.update([_ for _ in directors[director] if year_title(record) != _])
+            othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
+            othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
 
-        html = html.replace('{{other_movies}}', '\n'.join(othermovieshtml))
+            othermovieshtml = [OTHER_DIRECTOR_MOVIES % (first_director, make_li_list(othermovies1))]
+            if other_directors:
+                if len(other_directors) > 1:
+                    other_directors = other_directors[:1] + ['etc.']
+                othermovieshtml.append(OTHER_DIRECTOR_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
+
+            html = html.replace('{{other_movies}}', '\n'.join(othermovieshtml))
+        else:
+            html = html.replace('{{director}}', make_li_list(['Non renseigné']))
+            html = html.replace('{{other_movies}}', '\n')
 
         with open(html_name, 'wt', encoding='utf-8') as f:
             print(html, file=f)
