@@ -37,17 +37,7 @@ MOVIES_ALPHA = 'movies-alpha.htm'
 MOVIES_DIRECTOR = 'movies-director.htm'
 
 
-EMPTY = {
-    'imdb_id': None,
-    'title': None,
-    'year': None,
-    'director': [],
-    'cast': [],
-    'runtime': None,
-    'filesize': None,
-    'width': None,
-    'height': None
-}
+# -- Pass 1: extract data from title.basics.tsv.gz
 
 
 def extract_movie_tsv(movie_tsv_filename):
@@ -92,6 +82,9 @@ def load_movie_tsv(movie_tsv_filename):
     with open('titlestsv.pickle', 'rb') as f:
         titles = pickle.load(f)
     return titles
+
+
+# -- Pass 2: make json records and thumbnails
 
 
 def search_movie_tsv(titles, title, year=None):
@@ -145,6 +138,19 @@ def get_title(name, movie):
         return movie.get('original title')
     else:
         return movie.get('title')
+
+
+EMPTY = {
+    'imdb_id': None,
+    'title': None,
+    'year': None,
+    'director': [],
+    'cast': [],
+    'runtime': None,
+    'filesize': None,
+    'width': None,
+    'height': None
+}
 
 
 def create_minimal_record(dirpath, filename, name, year, ia):
@@ -277,9 +283,11 @@ def year_title(record):
     return f"{record['year']}: {record['title']}"
 
 
-def make_index(rep):
-    movies = []
-    directors = defaultdict(list)
+# -- Pass 3: make html files
+
+
+def load_records(rep):
+    records = []
     for movienum, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
         jsonname = os.path.join(dirpath, barename + '.json')
         if os.path.isfile(jsonname) is False:
@@ -287,23 +295,13 @@ def make_index(rep):
         else:
             with open(jsonname) as f:
                 record = json.loads(f.read())
-                record['movienum'] = movienum
-                record['dirpath'] = dirpath
-                record['filename'] = filename
-                record['barename'] = barename
-            # pprint.pprint(record)
-            movies.append(record)
-            director = record['director']
-            for _ in director:
-                directors[_].append(year_title(record))
+            record['movienum'] = movienum
+            record['dirpath'] = dirpath
+            record['filename'] = filename
+            record['barename'] = barename
+            records.append(record)
 
-    with open(os.path.join(rep, 'movies.pickle'), 'wb') as f:
-        pickle.dump(movies, f)
-
-    for director, lst in directors.items():
-        directors[director] = sorted(lst)
-    with open(os.path.join(rep, 'directors.pickle'), 'wb') as f:
-        pickle.dump(directors, f)
+    return records
 
 
 START = '''\
@@ -416,23 +414,17 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
     return movie_element
 
 
-def make_vrac_page(rep, forcethumb):
-    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
-        movies = pickle.load(f)
-
+def make_vrac_page(rep, records, forcethumb):
     with open(os.path.join(rep, MOVIES_VRAC), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
-        for record in movies:
+        for record in records:
             print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
 
 
-def make_year_page(rep, forcethumb):
-    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
-        movies = pickle.load(f)
-
+def make_year_page(rep, records, forcethumb):
     movies_by_year = defaultdict(list)
-    for record in movies:
+    for record in records:
         movies_by_year[record['year']].append(record)
 
     with open(os.path.join(rep, MOVIES_YEAR), 'wt', encoding='utf-8') as f:
@@ -444,12 +436,9 @@ def make_year_page(rep, forcethumb):
         print(END, file=f)
 
 
-def make_alpha_page(rep, forcethumb):
-    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
-        movies = pickle.load(f)
-
+def make_alpha_page(rep, records, forcethumb):
     movies_by_alpha = defaultdict(list)
-    for record in movies:
+    for record in records:
         movies_by_alpha[record['title'][0].upper()].append(record)
 
     with open(os.path.join(rep, MOVIES_ALPHA), 'wt', encoding='utf-8') as f:
@@ -461,12 +450,9 @@ def make_alpha_page(rep, forcethumb):
         print(END, file=f)
 
 
-def make_director_page(rep, forcethumb):
-    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
-        movies = pickle.load(f)
-
+def make_director_page(rep, records, forcethumb):
     movies_by_director = defaultdict(list)
-    for record in movies:
+    for record in records:
         for director in record['director']:
             movies_by_director[director].append(record)
 
@@ -477,14 +463,6 @@ def make_director_page(rep, forcethumb):
             for record in records:
                 print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
-
-
-def make_main_page(rep, forcethumb):
-    make_vrac_page(rep, forcethumb=forcethumb)
-    make_year_page(rep, forcethumb=False)
-    make_alpha_page(rep, forcethumb=False)
-    make_director_page(rep, forcethumb=False)
-    shutil.copy('movies.htm', rep)
 
 
 def make_li_list(liste):
@@ -498,15 +476,16 @@ OTHER_DIRECTOR_MOVIES = '''\
 </ul>
 '''
 
-def make_movie_pages(rep):
-    with open(os.path.join(rep, 'movies.pickle'), 'rb') as f:
-        movies = pickle.load(f)
-    with open(os.path.join(rep, 'directors.pickle'), 'rb') as f:
-        directors = pickle.load(f)
+def make_movie_pages(rep, records):
     with open('template.htm', encoding='utf-8') as f:
         template = f.read()
 
-    for record in movies:
+    director_movies = defaultdict(list)
+    for record in records:
+        for _ in record['director']:
+            director_movies[_].append(year_title(record))
+
+    for record in records:
         image_basename = record['barename'] + '.jpg'
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
@@ -524,17 +503,17 @@ def make_movie_pages(rep):
         if record['director']:
             first_director = record['director'][0]
             other_directors = record['director'][1:]
+            othermovies1 = [_ for _ in director_movies[first_director] if year_title(record) != _]
+            othermovies2 = set()
+            for director in other_directors:
+                othermovies2.update([_ for _ in director_movies[director] if year_title(record) != _])
+            othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
+            othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
+
             if other_directors:
                 html = html.replace('{{director}}', make_li_list([first_director, ', '.join(other_directors)]))
             else:
                 html = html.replace('{{director}}', make_li_list([first_director]))
-
-            othermovies1 = [_ for _ in directors[first_director] if year_title(record) != _]
-            othermovies2 = set()
-            for director in other_directors:
-                othermovies2.update([_ for _ in directors[director] if year_title(record) != _])
-            othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
-            othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
 
             othermovieshtml = [OTHER_DIRECTOR_MOVIES % (first_director, make_li_list(othermovies1))]
             if other_directors:
@@ -549,6 +528,19 @@ def make_movie_pages(rep):
 
         with open(html_name, 'wt', encoding='utf-8') as f:
             print(html, file=f)
+
+
+def make_html_pages(rep, forcethumb):
+    records = load_records(rep)
+    make_vrac_page(rep, records, forcethumb=forcethumb)
+    make_year_page(rep, records, forcethumb=False)
+    make_alpha_page(rep, records, forcethumb=False)
+    make_director_page(rep, records, forcethumb=False)
+    make_movie_pages(rep, records)
+    shutil.copy('movies.htm', rep)
+
+
+# -- Main
 
 
 def clean(rep):
@@ -606,15 +598,11 @@ def main():
         extract_movie_tsv(MOVIE_TSV_FN)
     elif args.extract_data:
         create_missing_records(args.rep, 'movie.tsv', args.force_json)
-        make_index(args.rep)
     elif args.make_pages:
-        make_main_page(args.rep, args.force_thumb)
-        make_movie_pages(args.rep)
+        make_html_pages(args.rep, args.force_thumb)
     elif args.update:
         create_missing_records(args.rep, 'movie.tsv', args.force_json)
-        make_index(args.rep)
-        make_main_page(args.rep, args.force_thumb)
-        make_movie_pages(args.rep)
+        make_html_pages(args.rep, args.force_thumb)
     elif args.test:
         test()
     else:
