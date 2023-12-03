@@ -60,40 +60,38 @@ def extract_movie_tsv(movie_tsv_filename):
         with open('data.tsv', 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
 
+    titles = defaultdict(set)
     with open('data.tsv', encoding='utf-8') as f:
         with open(movie_tsv_filename, 'wt', encoding='utf-8') as g:
-            print(f.readline(), file=g)
+            print(f.readline(), end='', file=g)
             for line in f:
                 if '\tmovie\t' in line:
                     print(line, end='', file=g)
+                    tconst, _, primary_title, original_title, _, year, _, _, _ = line.split('\t')
+
+                    primary_title = primary_title.lower()
+                    primary_title = primary_title.replace(':', '')
+                    primary_title = primary_title.replace('.', '')
+                    primary_title = primary_title.replace('  ', ' ')
+                    original_title = original_title.lower()
+                    original_title = original_title.replace(':', '')
+                    original_title = original_title.replace('.', '')
+                    original_title = original_title.replace('  ', ' ')
+
+                    titles[primary_title].add(tconst)
+                    titles[original_title].add(tconst)
+                    titles[f'{primary_title}-{year}'].add(tconst)
+                    titles[f'{original_title}-{year}'].add(tconst)
 
     os.remove('data.tsv')
+    with open('titlestsv.pickle', 'wb') as f:
+        pickle.dump(dict(titles), f)
 
 
 def load_movie_tsv(movie_tsv_filename):
-    movies = {}
-    titles = defaultdict(set)
-    with open(movie_tsv_filename, encoding='utf-8') as f:
-        f.readline()
-        for line in f:
-            tconst, _, primary_title, original_title, _, year, _, runtime_minutes, genres = line.split('\t')
-            movies[tconst] = (primary_title, original_title, year, runtime_minutes, genres)
-
-            primary_title = primary_title.replace(':', '')
-            original_title = original_title.replace(':', '')
-            original_title = original_title.replace('  ', ' ')
-            primary_title = primary_title.replace('.', '')
-            original_title = original_title.replace('.', '')
-            original_title = original_title.replace('  ', ' ')
-
-            primary_title = primary_title.lower()
-            original_title = original_title.lower()
-
-            titles[primary_title].add(tconst)
-            titles[original_title].add(tconst)
-            titles[f'{primary_title}-{year}'].add(tconst)
-            titles[f'{original_title}-{year}'].add(tconst)
-    return movies, dict(titles)
+    with open('titlestsv.pickle', 'rb') as f:
+        titles = pickle.load(f)
+    return titles
 
 
 def search_movie_tsv(titles, title, year=None):
@@ -134,36 +132,22 @@ def extract_image_from_movie(filename, imagename, size, delay):
     result = os.system(command)
 
 
-def movie_gen(rep):
-    """
-    Find recursively all movies in rep.
-    """
-    for dirpath, _, filenames in os.walk(rep):
-        for filename in filenames:
-            barename, ext = os.path.splitext(filename)
-            if ext in ('.mp4', '.avi', '.mkv'):
-                yield dirpath, filename, barename
-
-
-def get_title(name, moviestsv, imdbmovie):
+def get_title(name, movie):
     """
     name: title of movie as extracted from file name
-    moviestsv: dict[tt-id] --> data extracted from tsv file downloaded from imdb
-    imdbmovie: movie object retrieved from imdb
+    movie: movie object retrieved from imdb
     """
-    tt_id = 'tt' + imdbmovie.movieID
-    tsvrecord = moviestsv[tt_id]
-    if name == tsvrecord[0]:    # primaryTitle
+    if name == movie.get('title'):              # equals to primaryTitle from title.basics.tsv.gz
         return name
-    elif name == tsvrecord[1]:  # originalTitle
+    elif name ==  movie.get('original title'):  # equals to originalTitle from title.basics.tsv.gz
         return name
-    elif imdbmovie.get('countries')[0] == 'France':
-        return imdbmovie.get('original title')
+    elif movie.get('countries')[0] == 'France':
+        return movie.get('original title')
     else:
-        return  imdbmovie.get('title')
+        return movie.get('title')
 
 
-def create_minimal_record(dirpath, filename, name, year, movies, ia):
+def create_minimal_record(dirpath, filename, name, year, ia):
     record = EMPTY.copy()
     fullname = os.path.join(dirpath, filename)
 
@@ -184,7 +168,7 @@ def create_minimal_record(dirpath, filename, name, year, movies, ia):
     return record
 
 
-def create_record(dirpath, filename, name, movies, ia, imdb_id):
+def create_record(dirpath, filename, name, ia, imdb_id):
     record = EMPTY.copy()
     fullname = os.path.join(dirpath, filename)
 
@@ -199,7 +183,7 @@ def create_record(dirpath, filename, name, movies, ia, imdb_id):
     # set imdb information
     movie = ia.get_movie(imdb_id[2:])
     record['imdb_id'] = movie.movieID
-    record['title'] = get_title(name, movies, movie)
+    record['title'] = get_title(name, movie)
     record['year'] = movie.get('year')
     record['runtime'] = movie.get('runtimes')[0]
     record['director'] = [_.get('name') for _ in movie.get('director')]
@@ -215,6 +199,17 @@ def create_record(dirpath, filename, name, movies, ia, imdb_id):
     return record
 
 
+def movie_gen(rep):
+    """
+    Find recursively all movies in rep.
+    """
+    for dirpath, _, filenames in os.walk(rep):
+        for filename in filenames:
+            barename, ext = os.path.splitext(filename)
+            if ext in ('.mp4', '.avi', '.mkv'):
+                yield dirpath, filename, barename
+
+
 def create_missing_records(rep, tsvfile, forcejson=False):
     """
     Find recursively all movies in rep. Create json file (with same name as
@@ -226,7 +221,7 @@ def create_missing_records(rep, tsvfile, forcejson=False):
     new_movie_number = 0
     movie_found = 0
     print('Loading...')
-    movies, titles = load_movie_tsv(tsvfile)
+    titles = load_movie_tsv(tsvfile)
     print('Loaded')
 
     for dirpath, filename, barename in movie_gen(rep):
@@ -252,12 +247,12 @@ def create_missing_records(rep, tsvfile, forcejson=False):
             continue
         elif imdb_id is None:
             print(name, 'not found in imdb')
-            record = create_minimal_record(dirpath, filename, name, year, movies, ia)
+            record = create_minimal_record(dirpath, filename, name, year, ia)
         else:
             # movie found
             imdb_id = list(imdb_id)[0]
             movie_found += 1
-            record = create_record(dirpath, filename, name, movies, ia, imdb_id)
+            record = create_record(dirpath, filename, name, ia, imdb_id)
 
         # save record
         jsonname = os.path.join(dirpath, barename + '.json')
