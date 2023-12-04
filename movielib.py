@@ -34,6 +34,7 @@ MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
 MOVIES_ALPHA = 'movies-alpha.htm'
 MOVIES_DIRECTOR = 'movies-director.htm'
+MOVIES_STATS = 'movies-stats.htm'
 
 
 # -- Pass 1: extract data from title.basics.tsv.gz
@@ -424,9 +425,9 @@ def make_year_page(rep, records, forcethumb):
 
     with open(os.path.join(rep, '.gallery', MOVIES_YEAR), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
-        for year, records in sorted(movies_by_year.items()):
+        for year, year_records in sorted(movies_by_year.items()):
             print(f'<h2>{year}</h2>', file=f)
-            for record in records:
+            for record in year_records:
                 print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
 
@@ -438,9 +439,9 @@ def make_alpha_page(rep, records, forcethumb):
 
     with open(os.path.join(rep, '.gallery', MOVIES_ALPHA), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
-        for char, records in sorted(movies_by_alpha.items()):
+        for char, char_records in sorted(movies_by_alpha.items()):
             print(f'<h2>{char}</h2>', file=f)
-            for record in records:
+            for record in char_records:
                 print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
 
@@ -453,11 +454,66 @@ def make_director_page(rep, records, forcethumb):
 
     with open(os.path.join(rep, '.gallery', MOVIES_DIRECTOR), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
-        for director, records in sorted(movies_by_director.items()):
+        for director, dir_records in sorted(movies_by_director.items()):
             print(f'<h2> {director}</h2>', file=f)
-            for record in records:
+            for record in dir_records:
                 print(make_movie_element(rep, record, 160, forcethumb), file=f)
         print(END, file=f)
+
+
+STATS_TEMPLATE = '''
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>%s</title>
+<link rel="icon" href="Movies-icon.png" />
+<style type="text/css">
+body {
+  font: normal 14px Verdana, Arial, sans-serif;
+}
+td {
+  padding-left: 15px;
+  padding-right: 15px;
+  text-align: right;
+}
+</style>\
+<base target="_parent"></base>
+</head>
+
+<body>
+<div style="width: 95%%; margin-left: auto; margin-right: auto">\
+<table>
+{{content}}
+</table>
+</div>
+</body>
+</html>
+'''
+
+
+def space_thousands(n):
+    return f'{n:,}'.replace(',', ' ')
+
+
+def make_stats_page(rep, records):
+    rows = []
+    total = 0
+    for record in records:
+        data = (
+            record['title'],
+            record['year'],
+            record['width'],
+            record['height'],
+            space_thousands(record["filesize"])
+        )
+        rows.extend(['<tr>'] + [f'<td>{_}</td>' for _ in data] + ['</tr>'])
+        total += record["filesize"]
+
+    data = ('Total', '', '', '', space_thousands(total))
+    rows.extend(['<tr>'] + [f'<td>{_}</td>' for _ in data] + ['</tr>'])
+    content = STATS_TEMPLATE.replace('{{content}}', '\n'.join(rows))
+    with open(os.path.join(rep, '.gallery', MOVIES_STATS), 'wt', encoding='utf-8') as f:
+        print(content, file=f)
 
 
 def make_li_list(liste):
@@ -497,7 +553,7 @@ def make_movie_pages(rep, records):
         html = html.replace('{{runtime}}', str(record['runtime']))
         html = html.replace('{{width}}', str(record['width']))
         html = html.replace('{{height}}', str(record['height']))
-        html = html.replace('{{filesize}}', str(record['filesize']))
+        html = html.replace('{{filesize}}', space_thousands(record["filesize"]))
         html = html.replace('{{cast}}', make_li_list(record['cast'] if record['cast'] else ['Non renseigné']))
 
         if record['director']:
@@ -537,6 +593,7 @@ def make_html_pages(rep, forcethumb):
     make_year_page(rep, records, forcethumb=False)
     make_alpha_page(rep, records, forcethumb=False)
     make_director_page(rep, records, forcethumb=False)
+    make_stats_page(rep, records)
     make_movie_pages(rep, records)
     shutil.copy('movies.htm', rep)
 

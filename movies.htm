@@ -37,32 +37,37 @@
 </style>
 
 <script>
-function show_vrac() {
-    document.getElementById("div_vrac").style.display = "block";
+function hide_all() {
+    document.getElementById("div_vrac").style.display = "none";
     document.getElementById("div_year").style.display = "none";
     document.getElementById("div_alpha").style.display = "none";
     document.getElementById("div_director").style.display = "none";
+    document.getElementById("div_stats").style.display = "none";
+}
+
+function show_vrac() {
+    hide_all();
+    document.getElementById("div_vrac").style.display = "block";
 }
 
 function show_year() {
-    document.getElementById("div_vrac").style.display = "none";
+    hide_all();
     document.getElementById("div_year").style.display = "block";
-    document.getElementById("div_alpha").style.display = "none";
-    document.getElementById("div_director").style.display = "none";
 }
 
 function show_alpha() {
-    document.getElementById("div_vrac").style.display = "none";
-    document.getElementById("div_year").style.display = "none";
+    hide_all();
     document.getElementById("div_alpha").style.display = "block";
-    document.getElementById("div_director").style.display = "none";
 }
 
 function show_director() {
-    document.getElementById("div_vrac").style.display = "none";
-    document.getElementById("div_year").style.display = "none";
-    document.getElementById("div_alpha").style.display = "none";
+    hide_all();
     document.getElementById("div_director").style.display = "block";
+}
+
+function show_stats() {
+    hide_all();
+    document.getElementById("div_stats").style.display = "block";
 }
 
 function resizeIframe(iframe) {
@@ -82,6 +87,7 @@ window.onload = show_vrac;
   <a href="javascript:show_year()">Tri par année</a>
   <a href="javascript:show_alpha()">Tri alphabétique</a>
   <a href="javascript:show_director()">Tri par metteur en scène</a>
+  <a href="javascript:show_stats()">Stats</a>
   </div>
 </div>
 
@@ -89,6 +95,7 @@ window.onload = show_vrac;
 <iframe id="div_year" src=".gallery/movies-year.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
 <iframe id="div_alpha" src=".gallery/movies-alpha.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
 <iframe id="div_director" src=".gallery/movies-director.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
+<iframe id="div_stats" src=".gallery/movies-stats.htm" width="100%" height="100%"  frameBorder="0" onload="resizeIframe(this)" ></iframe>
 
 </body>
 </html>
