@@ -19,7 +19,6 @@ import types
 import shutil
 import gzip
 import argparse
-from datetime import datetime
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 
@@ -84,7 +83,7 @@ def load_movie_tsv(movie_tsv_filename):
     return titles
 
 
-# -- Pass 2: make json records and thumbnails
+# -- Pass 2: make json records and download default movie cover if required
 
 
 def search_movie_tsv(titles, title, year=None):
@@ -153,7 +152,7 @@ EMPTY = {
 }
 
 
-def create_minimal_record(dirpath, filename, name, year, ia):
+def create_minimal_record(dirpath, filename, name, year):
     record = EMPTY.copy()
     fullname = os.path.join(dirpath, filename)
 
@@ -253,7 +252,7 @@ def create_missing_records(rep, tsvfile, forcejson=False):
             continue
         elif imdb_id is None:
             print(name, 'not found in imdb')
-            record = create_minimal_record(dirpath, filename, name, year, ia)
+            record = create_minimal_record(dirpath, filename, name, year)
         else:
             # movie found
             imdb_id = list(imdb_id)[0]
@@ -279,11 +278,7 @@ def create_missing_records(rep, tsvfile, forcejson=False):
     print('movie_found', movie_found)
 
 
-def year_title(record):
-    return f"{record['year']}: {record['title']}"
-
-
-# -- Pass 3: make html files
+# -- Pass 3: make html files and thumbnails
 
 
 def load_records(rep):
@@ -396,15 +391,15 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
             '%d, %d, %d, %d' % (0, 0, width - 1, int(round(height / 3))),
             descr,
             '%d, %d, %d, %d' % (0, int(round(height / 3)), width - 1, int(round(2 * height / 3))),
-            urlencode(html_name[9:]),
+            urlencode(os.path.relpath(html_name, start=os.path.join(rep, '.gallery'))),
             '%d, %d, %d, %d' % (0, int(round(2 * height / 3)), width - 1, height - 1),
-            urlencode(movie_name[9:])
+            urlencode(os.path.relpath(movie_name, start=os.path.join(rep, '.gallery')))
         )
     else:
         imgmap = ''
 
     movie_element = VIDPOSTCAPTION % (
-        urlencode(thumb_name[9:]),
+        urlencode(os.path.join('.thumbnails', thumb_basename)),
         thumb_width,
         record['title'],
         record['movienum'],
@@ -415,7 +410,7 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
 
 
 def make_vrac_page(rep, records, forcethumb):
-    with open(os.path.join(rep, MOVIES_VRAC), 'wt', encoding='utf-8') as f:
+    with open(os.path.join(rep, '.gallery', MOVIES_VRAC), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
         for record in records:
             print(make_movie_element(rep, record, 160, forcethumb), file=f)
@@ -427,7 +422,7 @@ def make_year_page(rep, records, forcethumb):
     for record in records:
         movies_by_year[record['year']].append(record)
 
-    with open(os.path.join(rep, MOVIES_YEAR), 'wt', encoding='utf-8') as f:
+    with open(os.path.join(rep, '.gallery', MOVIES_YEAR), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
         for year, records in sorted(movies_by_year.items()):
             print(f'<h2>{year}</h2>', file=f)
@@ -441,7 +436,7 @@ def make_alpha_page(rep, records, forcethumb):
     for record in records:
         movies_by_alpha[record['title'][0].upper()].append(record)
 
-    with open(os.path.join(rep, MOVIES_ALPHA), 'wt', encoding='utf-8') as f:
+    with open(os.path.join(rep, '.gallery', MOVIES_ALPHA), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
         for char, records in sorted(movies_by_alpha.items()):
             print(f'<h2>{char}</h2>', file=f)
@@ -456,7 +451,7 @@ def make_director_page(rep, records, forcethumb):
         for director in record['director']:
             movies_by_director[director].append(record)
 
-    with open(os.path.join(rep, MOVIES_DIRECTOR), 'wt', encoding='utf-8') as f:
+    with open(os.path.join(rep, '.gallery', MOVIES_DIRECTOR), 'wt', encoding='utf-8') as f:
         print(START % 'Films', file=f)
         for director, records in sorted(movies_by_director.items()):
             print(f'<h2> {director}</h2>', file=f)
@@ -475,6 +470,11 @@ OTHER_DIRECTOR_MOVIES = '''\
     %s
 </ul>
 '''
+
+
+def year_title(record):
+    return f"{record['year']}: {record['title']}"
+
 
 def make_movie_pages(rep, records):
     with open('template.htm', encoding='utf-8') as f:
@@ -531,6 +531,7 @@ def make_movie_pages(rep, records):
 
 
 def make_html_pages(rep, forcethumb):
+    os.makedirs(os.path.join(rep, '.gallery', '.thumbnails'), exist_ok=True)
     records = load_records(rep)
     make_vrac_page(rep, records, forcethumb=forcethumb)
     make_year_page(rep, records, forcethumb=False)
