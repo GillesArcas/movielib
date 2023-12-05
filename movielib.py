@@ -333,21 +333,27 @@ h2 {
 <div style="width: 95%%; margin-left: auto; margin-right: auto">\
 '''
 END = '</div>\n</body>\n</html>'
+
+IMAGE_ONCLICK = '''
+<img src="%s" width="%d" alt="%s cover" title="%s" onclick="window.open('%s', '_self')">
+'''
+
+def image_onclick_element(record, rep, thumb_width, thumb_basename, html_name):
+    return IMAGE_ONCLICK % (
+        urlencode(os.path.join('.thumbnails', thumb_basename)),
+        thumb_width,
+        record['title'],
+        f"{record['title']}, {record['year']}, {', '.join(record['director'])}",
+        urlencode(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
+    )
+
 VIDPOSTCAPTION = '''\
 <span>
-<img src="%s" width="%d" alt="%s cover" usemap="#workmap%d">
+%s
 <p>%s</p>
 </span>
 %s
 '''
-IMGMAP = '''\
-<map name="workmap%d">
-  <area shape="rect" coords="%s" title="%s">
-  <area shape="rect" coords="%s" href="%s" title="Description">
-  <area shape="rect" coords="%s" href="%s" title="Play">
-</map>
-'''
-
 
 def urlencode(url):
     url = url.replace('\\', '/')
@@ -381,32 +387,12 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
         else:
             print('Warning: no image for', movie_name)
 
-    descr = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
-
-    if os.path.isfile(thumb_name):
-        width, height = Image.open(thumb_name).size
-        height = int(round(160.0 * height / width))
-        width = 160
-        imgmap = IMGMAP % (
-            record['movienum'],
-            '%d, %d, %d, %d' % (0, 0, width - 1, int(round(height / 3))),
-            descr,
-            '%d, %d, %d, %d' % (0, int(round(height / 3)), width - 1, int(round(2 * height / 3))),
-            urlencode(os.path.relpath(html_name, start=os.path.join(rep, '.gallery'))),
-            '%d, %d, %d, %d' % (0, int(round(2 * height / 3)), width - 1, height - 1),
-            urlencode(os.path.relpath(movie_name, start=os.path.join(rep, '.gallery')))
-        )
-    else:
-        imgmap = ''
-
     movie_element = VIDPOSTCAPTION % (
-        urlencode(os.path.join('.thumbnails', thumb_basename)),
-        thumb_width,
+        image_onclick_element(record, rep, thumb_width, thumb_basename, html_name),
         record['title'],
-        record['movienum'],
-        record['title'],
-        imgmap
+        ''
     )
+
     return movie_element
 
 
@@ -542,6 +528,7 @@ def make_movie_pages(rep, records):
             director_movies[_].append(year_title(record))
 
     for record in records:
+        movie_name = os.path.join(record['dirpath'], record['filename'])
         image_basename = record['barename'] + '.jpg'
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
@@ -555,6 +542,8 @@ def make_movie_pages(rep, records):
         html = html.replace('{{height}}', str(record['height']))
         html = html.replace('{{filesize}}', space_thousands(record["filesize"]))
         html = html.replace('{{cast}}', make_li_list(record['cast'] if record['cast'] else ['Non renseigné']))
+        html = html.replace('{{movie_link}}', urlencode(os.path.relpath(movie_name, start=os.path.join(rep, '.gallery'))))
+        html = html.replace('{{imdb_link}}', 'https://www.imdb.com/title/tt%s/' % record['imdb_id'])
 
         if record['director']:
             first_director = record['director'][0]
