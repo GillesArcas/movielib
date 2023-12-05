@@ -519,7 +519,7 @@ def year_title(record):
 
 
 def make_movie_pages(rep, records):
-    with open('template.htm', encoding='utf-8') as f:
+    with open(os.path.join(os.path.dirname(__file__), 'template.htm'), encoding='utf-8') as f:
         template = f.read()
 
     director_movies = defaultdict(list)
@@ -584,7 +584,7 @@ def make_html_pages(rep, forcethumb):
     make_director_page(rep, records, forcethumb=False)
     make_stats_page(rep, records)
     make_movie_pages(rep, records)
-    shutil.copy('movies.htm', rep)
+    shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
 
 
 # -- Main
