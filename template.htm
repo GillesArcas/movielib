@@ -22,6 +22,14 @@ a {
 a:hover {
   color: blue;
 }
+a.disabled {
+  pointer-events: none;
+  cursor: default;
+  color: lightgrey;
+}
+a.hidden {
+  visibility: hidden;
+}
 </style>
 
  </head>
@@ -36,7 +44,11 @@ a:hover {
 <br>
 <a href="{{movie_link}}">Visionner</a>
 <br>
-<a href="javascript:window.open('{{imdb_link}}', '_top')">Voir sur IMDB</a>
+<a {{imdb_link}}>Voir sur IMDB</a>
+<br>
+<a {{wikipedia_link}}>Voir sur Wikipedia</a>
+<br>
+<a {{google_link}}>Chercher sur Google</a>
 
 <!--
 pour ouvrir un répertoire

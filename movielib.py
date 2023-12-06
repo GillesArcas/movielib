@@ -140,6 +140,27 @@ def get_title(name, movie):
         return movie.get('title')
 
 
+def wikipedia_url(title, year):
+    title = title.replace(' ', '_')
+    url1 = f'https://en.wikipedia.org/wiki/{title}_({year}_film)'
+    url2 = f'https://en.wikipedia.org/wiki/{title}_(film)'
+    url3 = f'https://en.wikipedia.org/wiki/{title}'
+
+    for url in (url1, url2, url3):
+        try:
+            r = requests.get(url, timeout=10)
+        except requests.exceptions.ConnectionError:
+            print('Wikipedia connection', 'FAILURE', 'for', title)
+            continue
+        except requests.exceptions.ReadTimeout:
+            print('Wikipedia connection', 'TIMEOUT', 'for', title)
+            continue
+        if r.status_code == 200:
+            return url
+
+    return None
+
+
 EMPTY = {
     'imdb_id': None,
     'title': None,
@@ -149,7 +170,8 @@ EMPTY = {
     'runtime': None,
     'filesize': None,
     'width': None,
-    'height': None
+    'height': None,
+    'wikipedia_url': None
 }
 
 
@@ -194,6 +216,9 @@ def create_record(dirpath, filename, name, ia, imdb_id):
     record['runtime'] = movie.get('runtimes')[0]
     record['director'] = [_.get('name') for _ in movie.get('director')]
     record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
+
+    # set wikipedia url
+    record['wikipedia_url'] = wikipedia_url(record['title'], record['year'])
 
     # load default movie cover
     imgname = os.path.splitext(fullname)[0] + '.jpg'
@@ -518,6 +543,32 @@ def year_title(record):
     return f"{record['year']}: {record['title']}"
 
 
+def imdb_link(record):
+    if record['imdb_id']:
+        url = 'https://www.imdb.com/title/tt%s/' % record['imdb_id']
+        return f'href="javascript:window.open(\'{url}\', \'_top\')"'
+    else:
+        return 'class="disabled"'
+
+
+def wikipedia_link(record):
+    if record['wikipedia_url']:
+        url = record['wikipedia_url']
+        return f'href="javascript:window.open(\'{url}\', \'_top\')"'
+    else:
+        return 'class="disabled"'
+
+
+def google_link(record):
+    if record['imdb_id'] or record['wikipedia_url']:
+        return 'class="hidden"'
+    else:
+        search =  re.sub(r'[\W ]+', ' ', record['title'], flags=re.U)
+        words = search.split() + [str(record['year']), 'movie']
+        url = 'https://www.google.com/search?q=' + '+'.join(words)
+        return f'href="javascript:window.open(\'{url}\', \'_top\')"'
+
+
 def make_movie_pages(rep, records):
     with open(os.path.join(os.path.dirname(__file__), 'template.htm'), encoding='utf-8') as f:
         template = f.read()
@@ -542,8 +593,11 @@ def make_movie_pages(rep, records):
         html = html.replace('{{height}}', str(record['height']))
         html = html.replace('{{filesize}}', space_thousands(record["filesize"]))
         html = html.replace('{{cast}}', make_li_list(record['cast'] if record['cast'] else ['Non renseigné']))
+
         html = html.replace('{{movie_link}}', urlencode(os.path.relpath(movie_name, start=os.path.join(rep, '.gallery'))))
-        html = html.replace('{{imdb_link}}', 'https://www.imdb.com/title/tt%s/' % record['imdb_id'])
+        html = html.replace('{{imdb_link}}', imdb_link(record))
+        html = html.replace('{{wikipedia_link}}', wikipedia_link(record))
+        html = html.replace('{{google_link}}', google_link(record))
 
         if record['director']:
             first_director = record['director'][0]
