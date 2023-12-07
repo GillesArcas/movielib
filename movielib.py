@@ -569,6 +569,54 @@ def google_link(record):
         return f'href="javascript:window.open(\'{url}\', \'_top\')"'
 
 
+def movie_record_html(record, template, director_movies):
+    movie_name = os.path.join(record['dirpath'], record['filename'])
+    image_basename = record['barename'] + '.jpg'
+
+    html = template[:]
+    html = html.replace('{{cover}}', image_basename)
+    html = html.replace('{{title}}', record['title'])
+    html = html.replace('{{year}}', str(record['year']))
+    html = html.replace('{{runtime}}', str(record['runtime']))
+    html = html.replace('{{width}}', str(record['width']))
+    html = html.replace('{{height}}', str(record['height']))
+    html = html.replace('{{filesize}}', space_thousands(record["filesize"]))
+    html = html.replace('{{cast}}', make_li_list(record['cast'] if record['cast'] else ['Non renseigné']))
+
+    html = html.replace('{{movie_link}}', f'file:///{movie_name}')
+    html = html.replace('{{imdb_link}}', imdb_link(record))
+    html = html.replace('{{wikipedia_link}}', wikipedia_link(record))
+    html = html.replace('{{google_link}}', google_link(record))
+
+    if record['director']:
+        first_director = record['director'][0]
+        other_directors = record['director'][1:]
+        othermovies1 = [_ for _ in director_movies[first_director] if year_title(record) != _]
+        othermovies2 = set()
+        for director in other_directors:
+            othermovies2.update([_ for _ in director_movies[director] if year_title(record) != _])
+        othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
+        othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
+
+        if other_directors:
+            html = html.replace('{{director}}', make_li_list([first_director, ', '.join(other_directors)]))
+        else:
+            html = html.replace('{{director}}', make_li_list([first_director]))
+
+        othermovieshtml = [OTHER_DIRECTOR_MOVIES % (first_director, make_li_list(othermovies1))]
+        if other_directors:
+            if len(other_directors) > 1:
+                other_directors = other_directors[:1] + ['etc.']
+            othermovieshtml.append(OTHER_DIRECTOR_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
+
+        html = html.replace('{{other_movies}}', '\n'.join(othermovieshtml))
+    else:
+        html = html.replace('{{director}}', make_li_list(['Non renseigné']))
+        html = html.replace('{{other_movies}}', '\n')
+
+    return html
+
+
 def make_movie_pages(rep, records):
     with open(os.path.join(os.path.dirname(__file__), 'template.htm'), encoding='utf-8') as f:
         template = f.read()
@@ -579,52 +627,9 @@ def make_movie_pages(rep, records):
             director_movies[_].append(year_title(record))
 
     for record in records:
-        movie_name = os.path.join(record['dirpath'], record['filename'])
-        image_basename = record['barename'] + '.jpg'
+        html = movie_record_html(record, template, director_movies)
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
-
-        html = template[:]
-        html = html.replace('{{cover}}', image_basename)
-        html = html.replace('{{title}}', record['title'])
-        html = html.replace('{{year}}', str(record['year']))
-        html = html.replace('{{runtime}}', str(record['runtime']))
-        html = html.replace('{{width}}', str(record['width']))
-        html = html.replace('{{height}}', str(record['height']))
-        html = html.replace('{{filesize}}', space_thousands(record["filesize"]))
-        html = html.replace('{{cast}}', make_li_list(record['cast'] if record['cast'] else ['Non renseigné']))
-
-        html = html.replace('{{movie_link}}', urlencode(os.path.relpath(movie_name, start=os.path.join(rep, '.gallery'))))
-        html = html.replace('{{imdb_link}}', imdb_link(record))
-        html = html.replace('{{wikipedia_link}}', wikipedia_link(record))
-        html = html.replace('{{google_link}}', google_link(record))
-
-        if record['director']:
-            first_director = record['director'][0]
-            other_directors = record['director'][1:]
-            othermovies1 = [_ for _ in director_movies[first_director] if year_title(record) != _]
-            othermovies2 = set()
-            for director in other_directors:
-                othermovies2.update([_ for _ in director_movies[director] if year_title(record) != _])
-            othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
-            othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
-
-            if other_directors:
-                html = html.replace('{{director}}', make_li_list([first_director, ', '.join(other_directors)]))
-            else:
-                html = html.replace('{{director}}', make_li_list([first_director]))
-
-            othermovieshtml = [OTHER_DIRECTOR_MOVIES % (first_director, make_li_list(othermovies1))]
-            if other_directors:
-                if len(other_directors) > 1:
-                    other_directors = other_directors[:1] + ['etc.']
-                othermovieshtml.append(OTHER_DIRECTOR_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
-
-            html = html.replace('{{other_movies}}', '\n'.join(othermovieshtml))
-        else:
-            html = html.replace('{{director}}', make_li_list(['Non renseigné']))
-            html = html.replace('{{other_movies}}', '\n')
-
         with open(html_name, 'wt', encoding='utf-8') as f:
             print(html, file=f)
 
