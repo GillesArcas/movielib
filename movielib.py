@@ -325,52 +325,20 @@ def load_records(rep):
     return records
 
 
-START = '''\
-<html>
 
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-<title>%s</title>
-<link rel="icon" href="Movies-icon.png" />
-<style type="text/css">
-body {
-  font: normal 14px Verdana, Arial, sans-serif;
-}
-p {
-  margin-top:0px;
-  margin-bottom:10px;
-}
-span {
-  display:inline-table;
-  width:160px
-}
-h2 {
-  padding: 4px;
-  line-height: 12px;
-  border-top: 2px solid grey;
-  border-bottom: 2px solid grey;
-}
-</style>\
-<base target="_parent"></base>
-</head>
-
-<body>
-<div style="width: 95%%; margin-left: auto; margin-right: auto">\
-'''
-END = '</div>\n</body>\n</html>'
-
-IMAGE_ONCLICK = '''
-<img src="%s" width="%d" alt="%s cover" title="%s" onclick="window.open('%s', '_self')">
+IMAGE = '''
+<img class="cover" src="%s" alt="%s cover" title="%s" onclick="window.open('%s', '_self')">
 '''
 
-def image_onclick_element(record, rep, thumb_width, thumb_basename, html_name):
-    return IMAGE_ONCLICK % (
+
+def image_element(record, rep, _, thumb_basename, html_name):
+    return IMAGE % (
         urlencode(os.path.join('.thumbnails', thumb_basename)),
-        thumb_width,
         record['title'],
         f"{record['title']}, {record['year']}, {', '.join(record['director'])}",
         urlencode(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
     )
+
 
 VIDPOSTCAPTION = '''\
 <span>
@@ -379,6 +347,7 @@ VIDPOSTCAPTION = '''\
 </span>
 %s
 '''
+
 
 def urlencode(url):
     url = url.replace('\\', '/')
@@ -413,7 +382,7 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
             print('Warning: no image for', movie_name)
 
     movie_element = VIDPOSTCAPTION % (
-        image_onclick_element(record, rep, thumb_width, thumb_basename, html_name),
+        image_element(record, rep, thumb_width, thumb_basename, html_name),
         record['title'],
         ''
     )
@@ -421,12 +390,21 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
     return movie_element
 
 
+def make_gallery_page(rep, pagename, content):
+    template_fullname = os.path.join(os.path.dirname(__file__), 'template-gallery.htm')
+    with open(template_fullname, encoding='utf-8') as f:
+        template = f.read()
+    template = template.replace('{{content}}', '\n'.join(content))
+
+    with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
+        print(template, file=f)
+
+
 def make_vrac_page(rep, records, forcethumb):
-    with open(os.path.join(rep, '.gallery', MOVIES_VRAC), 'wt', encoding='utf-8') as f:
-        print(START % 'Films', file=f)
-        for record in records:
-            print(make_movie_element(rep, record, 160, forcethumb), file=f)
-        print(END, file=f)
+    content = []
+    for record in records:
+        content.append(make_movie_element(rep, record, 160, forcethumb))
+    make_gallery_page(rep, MOVIES_VRAC, content)
 
 
 def make_year_page(rep, records, forcethumb):
@@ -434,13 +412,13 @@ def make_year_page(rep, records, forcethumb):
     for record in records:
         movies_by_year[record['year']].append(record)
 
-    with open(os.path.join(rep, '.gallery', MOVIES_YEAR), 'wt', encoding='utf-8') as f:
-        print(START % 'Films', file=f)
-        for year, year_records in sorted(movies_by_year.items()):
-            print(f'<h2>{year}</h2>', file=f)
-            for record in year_records:
-                print(make_movie_element(rep, record, 160, forcethumb), file=f)
-        print(END, file=f)
+    content = []
+    for year, year_records in sorted(movies_by_year.items()):
+        content.append(f'<h2>{year}</h2>')
+        for record in year_records:
+            content.append(make_movie_element(rep, record, 160, forcethumb))
+
+    make_gallery_page(rep, MOVIES_YEAR, content)
 
 
 def make_alpha_page(rep, records, forcethumb):
@@ -448,13 +426,13 @@ def make_alpha_page(rep, records, forcethumb):
     for record in records:
         movies_by_alpha[record['title'][0].upper()].append(record)
 
-    with open(os.path.join(rep, '.gallery', MOVIES_ALPHA), 'wt', encoding='utf-8') as f:
-        print(START % 'Films', file=f)
-        for char, char_records in sorted(movies_by_alpha.items()):
-            print(f'<h2>{char}</h2>', file=f)
-            for record in char_records:
-                print(make_movie_element(rep, record, 160, forcethumb), file=f)
-        print(END, file=f)
+    content = []
+    for char, char_records in sorted(movies_by_alpha.items()):
+        content.append(f'<h2>{char}</h2>')
+        for record in char_records:
+            content.append(make_movie_element(rep, record, 160, forcethumb))
+
+    make_gallery_page(rep, MOVIES_ALPHA, content)
 
 
 def make_director_page(rep, records, forcethumb):
@@ -463,13 +441,13 @@ def make_director_page(rep, records, forcethumb):
         for director in record['director']:
             movies_by_director[director].append(record)
 
-    with open(os.path.join(rep, '.gallery', MOVIES_DIRECTOR), 'wt', encoding='utf-8') as f:
-        print(START % 'Films', file=f)
-        for director, dir_records in sorted(movies_by_director.items()):
-            print(f'<h2> {director}</h2>', file=f)
-            for record in dir_records:
-                print(make_movie_element(rep, record, 160, forcethumb), file=f)
-        print(END, file=f)
+    content = []
+    for director, dir_records in sorted(movies_by_director.items()):
+        content.append(f'<h2>{director}</h2>')
+        for record in dir_records:
+            content.append(make_movie_element(rep, record, 160, forcethumb))
+
+    make_gallery_page(rep, MOVIES_DIRECTOR, content)
 
 
 STATS_TEMPLATE = '''
@@ -646,7 +624,7 @@ def make_html_pages(rep, forcethumb):
     shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
 
 
-# -- Main
+# -- Test functions
 
 
 def clean(rep):
@@ -676,6 +654,21 @@ def test():
     people = ia.search_person('Mel Gibson')
     for person in people:
         print(person.personID, person['name'])
+
+
+def stats_images(rep):
+    records = load_records(rep)
+    ratios = []
+    for record in records:
+        image_basename = record['barename'] + '.jpg'
+        image_name = os.path.join(record['dirpath'], image_basename)
+        if os.path.isfile(image_name):
+            width, height = Image.open(image_name).size
+            ratios.append(height / width)
+    print('Mean image ratio', sum(ratios) / len(ratios))
+
+
+# -- Main
 
 
 def parse_command_line():
