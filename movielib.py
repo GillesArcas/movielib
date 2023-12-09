@@ -32,6 +32,7 @@ import galerie
 
 
 MOVIE_TSV = 'movie.tsv'
+TITLES_INDEX = 'titlestsv.pickle'
 MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
 MOVIES_ALPHA = 'movies-alpha.htm'
@@ -42,19 +43,28 @@ MOVIES_STATS = 'movies-stats.htm'
 # -- Pass 1: extract data from title.basics.tsv.gz
 
 
-def extract_movie_tsv(movie_tsv_filename):
+@cache
+def cachedir():
+    tempdir = tempfile.gettempdir()
+    cache_dir = os.path.join(tempdir, 'movielib')
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    return cache_dir
+
+
+def extract_movie_tsv():
     """
     Assume that the file title.basics.tsv.gz has been downloaded from
     https://developer.imdb.com/non-commercial-datasets/ and that it contains
     the file data.tsv.
     """
     with gzip.open('title.basics.tsv.gz', 'rb') as f_in:
-        with open('data.tsv', 'wb') as f_out:
+        with open(os.path.join(cachedir(), 'data.tsv'), 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
 
     titles = defaultdict(set)
-    with open('data.tsv', encoding='utf-8') as f:
-        with open(movie_tsv_filename, 'wt', encoding='utf-8') as g:
+    with open(os.path.join(cachedir(), 'data.tsv'), encoding='utf-8') as f:
+        with open(os.path.join(cachedir(), MOVIE_TSV), 'wt', encoding='utf-8') as g:
             print(f.readline(), end='', file=g)
             for line in f:
                 if '\tmovie\t' in line:
@@ -75,15 +85,15 @@ def extract_movie_tsv(movie_tsv_filename):
                     titles[f'{primary_title}-{year}'].add(tconst)
                     titles[f'{original_title}-{year}'].add(tconst)
 
-    os.remove('data.tsv')
-    with open('titlestsv.pickle', 'wb') as f:
+    os.remove(os.path.join(cachedir(), 'data.tsv'))
+    with open(os.path.join(cachedir(), TITLES_INDEX), 'wb') as f:
         pickle.dump(dict(titles), f)
 
 
 @cache
 def titles_index():
     print('Loading titles index...')
-    with open('titlestsv.pickle', 'rb') as f:
+    with open(os.path.join(cachedir(), TITLES_INDEX), 'rb') as f:
         titles = pickle.load(f)
     print('Loaded')
     return titles
@@ -696,7 +706,7 @@ def parse_command_line():
 def main():
     parser, args = parse_command_line()
     if args.extract_movie_tsv:
-        extract_movie_tsv(MOVIE_TSV)
+        extract_movie_tsv()
     elif args.extract_data:
         create_missing_records(args.rep, args.force_json)
     elif args.make_pages:
