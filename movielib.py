@@ -19,8 +19,10 @@ import types
 import shutil
 import gzip
 import argparse
+import tempfile
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
+from functools import cache
 
 import requests
 from PIL import Image
@@ -29,7 +31,7 @@ from imdb import Cinemagoer
 import galerie
 
 
-MOVIE_TSV_FN = 'movie.tsv'
+MOVIE_TSV = 'movie.tsv'
 MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
 MOVIES_ALPHA = 'movies-alpha.htm'
@@ -78,18 +80,21 @@ def extract_movie_tsv(movie_tsv_filename):
         pickle.dump(dict(titles), f)
 
 
-def load_movie_tsv(movie_tsv_filename):
+@cache
+def titles_index():
+    print('Loading titles index...')
     with open('titlestsv.pickle', 'rb') as f:
         titles = pickle.load(f)
+    print('Loaded')
     return titles
 
 
 # -- Pass 2: make json records and download default movie cover if required
 
 
-def search_movie_tsv(titles, title, year=None):
+def title_imdb_id(title, year=None):
     key = title if (year is None) else f'{title}-{year}'
-    return titles.get(key.lower(), None)
+    return titles_index().get(key.lower(), None)
 
 
 def get_dimensions(filename):
@@ -241,7 +246,7 @@ def movie_gen(rep):
                 yield dirpath, filename, barename
 
 
-def create_missing_records(rep, tsvfile, forcejson=False):
+def create_missing_records(rep, forcejson=False):
     """
     Find recursively all movies in rep. Create json file (with same name as
     movie) if absent. Fill record with imdb data if imdb id can be found, plus
@@ -251,9 +256,6 @@ def create_missing_records(rep, tsvfile, forcejson=False):
     movie_number = 0
     new_movie_number = 0
     movie_found = 0
-    print('Loading...')
-    titles = load_movie_tsv(tsvfile)
-    print('Loaded')
 
     for dirpath, filename, barename in movie_gen(rep):
         movie_number += 1
@@ -267,11 +269,11 @@ def create_missing_records(rep, tsvfile, forcejson=False):
             match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
             name = match.group(1).strip()
             year = int(match.group(2))
-            imdb_id = search_movie_tsv(titles, name, year)
+            imdb_id = title_imdb_id(name, year)
         else:
             name = barename.strip()
             year = 9999
-            imdb_id = search_movie_tsv(titles, name)
+            imdb_id = title_imdb_id(name)
 
         if imdb_id and len(imdb_id) > 1:
             print(name, 'ambiguous', imdb_id)
@@ -595,7 +597,7 @@ def movie_record_html(record, template, director_movies):
     return html
 
 
-def make_movie_pages(rep, records):
+def make_movie_pages(records):
     with open(os.path.join(os.path.dirname(__file__), 'template.htm'), encoding='utf-8') as f:
         template = f.read()
 
@@ -620,7 +622,7 @@ def make_html_pages(rep, forcethumb):
     make_alpha_page(rep, records, forcethumb=False)
     make_director_page(rep, records, forcethumb=False)
     make_stats_page(rep, records)
-    make_movie_pages(rep, records)
+    make_movie_pages(records)
     shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
 
 
@@ -694,13 +696,13 @@ def parse_command_line():
 def main():
     parser, args = parse_command_line()
     if args.extract_movie_tsv:
-        extract_movie_tsv(MOVIE_TSV_FN)
+        extract_movie_tsv(MOVIE_TSV)
     elif args.extract_data:
-        create_missing_records(args.rep, 'movie.tsv', args.force_json)
+        create_missing_records(args.rep, args.force_json)
     elif args.make_pages:
         make_html_pages(args.rep, args.force_thumb)
     elif args.update:
-        create_missing_records(args.rep, 'movie.tsv', args.force_json)
+        create_missing_records(args.rep, args.force_json)
         make_html_pages(args.rep, args.force_thumb)
     elif args.test:
         test()
