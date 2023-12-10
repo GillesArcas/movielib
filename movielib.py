@@ -230,7 +230,7 @@ def create_record(dirpath, filename, name, ia, imdb_id):
     record['year'] = movie.get('year')
     record['runtime'] = movie.get('runtimes')[0]
     record['director'] = [_.get('name') for _ in movie.get('director')]
-    record['cast'] = [_.get('name') for _ in movie.get('cast')[:5]]
+    record['cast'] = [_.get('name') for _ in movie.get('cast')]
 
     # set wikipedia url
     record['wikipedia_url'] = wikipedia_url(record['title'], record['year'])
@@ -338,9 +338,20 @@ def load_records(rep):
 
 
 
-IMAGE = '''
-<img class="cover" src="%s" alt="%s cover" title="%s" onclick="window.open('%s', '_self')">
-'''
+def escape_open_url(url):
+    url = url.replace('\\', '/')
+    url = url.replace("'", "\\'")
+    return url
+
+
+def urlencode(url):
+    url = url.replace('\\', '/')
+    url = url.replace(' ', '%20')
+    return url
+
+
+ONCLICK = "window.open('%s', '_self')"
+IMAGE = f'<img class="cover" src="%s" alt="%s cover" title="%s" onclick="{ONCLICK}">'
 
 
 def image_element(record, rep, _, thumb_basename, html_name):
@@ -348,7 +359,7 @@ def image_element(record, rep, _, thumb_basename, html_name):
         urlencode(os.path.join('.thumbnails', thumb_basename)),
         record['title'],
         f"{record['title']}, {record['year']}, {', '.join(record['director'])}",
-        urlencode(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
+        escape_open_url(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
     )
 
 
@@ -361,12 +372,6 @@ VIDPOSTCAPTION = '''\
 '''
 
 
-def urlencode(url):
-    url = url.replace('\\', '/')
-    url = url.replace(' ', '%20')
-    return url
-
-
 def time_ordered(fn1, fn2):
     """
     Check if two files are time ordered.
@@ -374,7 +379,7 @@ def time_ordered(fn1, fn2):
     return os.path.getmtime(fn1) < os.path.getmtime(fn2)
 
 
-def make_movie_element(rep, record, thumb_width, forcethumb=False):
+def make_movie_element(rep, record, thumb_width, forcethumb=False, caption=False):
     movie_name = os.path.join(record['dirpath'], record['filename'])
     image_basename = record['barename'] + '.jpg'
     image_name = os.path.join(record['dirpath'], image_basename)
@@ -395,7 +400,7 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False):
 
     movie_element = VIDPOSTCAPTION % (
         image_element(record, rep, thumb_width, thumb_basename, html_name),
-        record['title'],
+        record['caption'] if caption else record['title'],
         ''
     )
 
@@ -452,12 +457,13 @@ def make_director_page(rep, records, forcethumb):
     for record in records:
         for director in record['director']:
             movies_by_director[director].append(record)
+            record['caption'] = f"{record['year']}: {record['title']}"
 
     content = []
     for director, dir_records in sorted(movies_by_director.items()):
         content.append(f'<h2>{director}</h2>')
-        for record in dir_records:
-            content.append(make_movie_element(rep, record, 160, forcethumb))
+        for record in sorted(dir_records, key=lambda rec: rec['caption']):
+            content.append(make_movie_element(rep, record, 160, forcethumb, caption=True))
 
     make_gallery_page(rep, MOVIES_DIRECTOR, content)
 
@@ -543,14 +549,14 @@ def imdb_link(record):
 
 def wikipedia_link(record):
     if record['wikipedia_url']:
-        url = record['wikipedia_url']
+        url = escape_open_url(record['wikipedia_url'])
         return f'href="javascript:window.open(\'{url}\', \'_top\')"'
     else:
         return 'class="disabled"'
 
 
 def google_link(record):
-    if record['imdb_id'] or record['wikipedia_url']:
+    if 0:  # record['imdb_id'] or record['wikipedia_url']:
         return 'class="hidden"'
     else:
         search =  re.sub(r'[\W ]+', ' ', record['title'], flags=re.U)
@@ -559,7 +565,15 @@ def google_link(record):
         return f'href="javascript:window.open(\'{url}\', \'_top\')"'
 
 
-def movie_record_html(record, template, director_movies):
+def actors_content(record):
+    content = make_li_list(record['cast'][:5] if record['cast'] else ['Non renseigné'])
+    if len(record['cast']) > 5:
+        li_more = '<li title="%s">...</li>' % ', '.join(record['cast'][5:])
+        content = content + li_more + '\n'
+    return content
+
+
+def movie_record_html(record, template, director_movies, actor_movies):
     movie_name = os.path.join(record['dirpath'], record['filename'])
     image_basename = record['barename'] + '.jpg'
 
@@ -571,7 +585,8 @@ def movie_record_html(record, template, director_movies):
     html = html.replace('{{width}}', str(record['width']))
     html = html.replace('{{height}}', str(record['height']))
     html = html.replace('{{filesize}}', space_thousands(record["filesize"]))
-    html = html.replace('{{cast}}', make_li_list(record['cast'] if record['cast'] else ['Non renseigné']))
+
+    html = html.replace('{{cast}}', actors_content(record))
 
     html = html.replace('{{movie_link}}', f'file:///{movie_name}')
     html = html.replace('{{imdb_link}}', imdb_link(record))
@@ -604,6 +619,14 @@ def movie_record_html(record, template, director_movies):
         html = html.replace('{{director}}', make_li_list(['Non renseigné']))
         html = html.replace('{{other_movies}}', '\n')
 
+    liste = []
+    if record['cast']:
+        for actor in record['cast'][:5]:
+            actormovies = [_ for _ in actor_movies[actor] if year_title(record) != _]
+            if actormovies:
+                liste.append(OTHER_DIRECTOR_MOVIES % (actor, make_li_list(actormovies)))
+    html = html.replace('{{actormovies}}', '\n'.join(liste))
+
     return html
 
 
@@ -616,8 +639,15 @@ def make_movie_pages(records):
         for _ in record['director']:
             director_movies[_].append(year_title(record))
 
+    actor_movies = defaultdict(list)
     for record in records:
-        html = movie_record_html(record, template, director_movies)
+        for _ in record['cast']:
+            actor_movies[_].append(year_title(record))
+    for actor, movies in actor_movies.items():
+        actor_movies[actor] = sorted(movies)
+
+    for record in records:
+        html = movie_record_html(record, template, director_movies, actor_movies)
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
         with open(html_name, 'wt', encoding='utf-8') as f:
