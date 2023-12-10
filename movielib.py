@@ -429,8 +429,20 @@ def make_year_page(rep, records, forcethumb):
     for record in records:
         movies_by_year[record['year']].append(record)
 
+    first_year_in_decade = {}
+    for year in sorted(movies_by_year):
+        if first_year_in_decade.get(year - year % 10, None) is None:
+            first_year_in_decade[year - year % 10] = year
+
     content = []
+    content.append('<h2>')
+    for year in sorted(first_year_in_decade):
+        content.append(f'<a style="display:inline-table;" href="#{year}">{year}</a>')
+    content.append('</h2>')
+
     for year, year_records in sorted(movies_by_year.items()):
+        if year == first_year_in_decade[year - year % 10]:
+            content.append(f'<div id="{year - year % 10}" style="visibility: hidden;"></div>')
         content.append(f'<h2>{year}</h2>')
         for record in year_records:
             content.append(make_movie_element(rep, record, 160, forcethumb))
@@ -444,7 +456,13 @@ def make_alpha_page(rep, records, forcethumb):
         movies_by_alpha[record['title'][0].upper()].append(record)
 
     content = []
+    content.append('<h2>')
+    for char in sorted(movies_by_alpha):
+        content.append(f'<a style="display:inline-table;" href="#{char}">{char}</a>')
+    content.append('</h2>')
+
     for char, char_records in sorted(movies_by_alpha.items()):
+        content.append(f'<div id="{char}" style="visibility: hidden;"></div>')
         content.append(f'<h2>{char}</h2>')
         for record in char_records:
             content.append(make_movie_element(rep, record, 160, forcethumb))
@@ -459,8 +477,20 @@ def make_director_page(rep, records, forcethumb):
             movies_by_director[director].append(record)
             record['caption'] = f"{record['year']}: {record['title']}"
 
+    first_director = {}
+    for director in sorted(movies_by_director):
+        if first_director.get(director[0], None) is None:
+            first_director[director[0]] = director
+
     content = []
+    content.append('<h2>')
+    for char in sorted(first_director):
+        content.append(f'<a style="display:inline-table;" href="#{char}">{char}</a>')
+    content.append('</h2>')
+
     for director, dir_records in sorted(movies_by_director.items()):
+        if director == first_director[director[0]]:
+            content.append(f'<div id="{director[0]}" style="visibility: hidden;"></div>')
         content.append(f'<h2>{director}</h2>')
         for record in sorted(dir_records, key=lambda rec: rec['caption']):
             content.append(make_movie_element(rep, record, 160, forcethumb, caption=True))
@@ -527,7 +557,7 @@ def make_li_list(liste):
     return '\n'.join([f'<li>{_}</li>' for _ in liste])
 
 
-OTHER_DIRECTOR_MOVIES = '''\
+OTHER_MOVIES = '''\
 <h3>Autres films de %s dans la collection</h3>
  <ul>
     %s
@@ -608,11 +638,11 @@ def movie_record_html(record, template, director_movies, actor_movies):
         else:
             html = html.replace('{{director}}', make_li_list([first_director]))
 
-        othermovieshtml = [OTHER_DIRECTOR_MOVIES % (first_director, make_li_list(othermovies1))]
+        othermovieshtml = [OTHER_MOVIES % (first_director, make_li_list(othermovies1))]
         if other_directors:
             if len(other_directors) > 1:
                 other_directors = other_directors[:1] + ['etc.']
-            othermovieshtml.append(OTHER_DIRECTOR_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
+            othermovieshtml.append(OTHER_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
 
         html = html.replace('{{other_movies}}', '\n'.join(othermovieshtml))
     else:
@@ -624,7 +654,7 @@ def movie_record_html(record, template, director_movies, actor_movies):
         for actor in record['cast'][:5]:
             actormovies = [_ for _ in actor_movies[actor] if year_title(record) != _]
             if actormovies:
-                liste.append(OTHER_DIRECTOR_MOVIES % (actor, make_li_list(actormovies)))
+                liste.append(OTHER_MOVIES % (actor, make_li_list(actormovies)))
     html = html.replace('{{actormovies}}', '\n'.join(liste))
 
     return html
