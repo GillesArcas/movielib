@@ -33,6 +33,8 @@ import galerie
 
 MOVIE_TSV = 'movie.tsv'
 TITLES_INDEX = 'titlestsv.pickle'
+TEMPLATE_GALLERY = 'template-gallery.htm'
+TEMPLATE_MOVIE = 'template-movie.htm'
 MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
 MOVIES_ALPHA = 'movies-alpha.htm'
@@ -408,7 +410,7 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False, caption=False
 
 
 def make_gallery_page(rep, pagename, content):
-    template_fullname = os.path.join(os.path.dirname(__file__), 'template-gallery.htm')
+    template_fullname = os.path.join(os.path.dirname(__file__), TEMPLATE_GALLERY)
     with open(template_fullname, encoding='utf-8') as f:
         template = f.read()
     template = template.replace('{{content}}', '\n'.join(content))
@@ -661,7 +663,7 @@ def movie_record_html(record, template, director_movies, actor_movies):
 
 
 def make_movie_pages(records):
-    with open(os.path.join(os.path.dirname(__file__), 'template.htm'), encoding='utf-8') as f:
+    with open(os.path.join(os.path.dirname(__file__), TEMPLATE_MOVIE), encoding='utf-8') as f:
         template = f.read()
 
     director_movies = defaultdict(list)
