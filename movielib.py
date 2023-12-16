@@ -23,6 +23,7 @@ import tempfile
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 from functools import cache
+from pathlib import Path
 
 import requests
 from PIL import Image
@@ -34,6 +35,7 @@ import galerie
 MOVIE_TSV = 'movie.tsv'
 TITLES_INDEX = 'titlestsv.pickle'
 TEMPLATE_GALLERY = 'template-gallery.htm'
+TEMPLATE_STATS = 'template-stats.htm'
 TEMPLATE_MOVIE = 'template-movie.htm'
 MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
@@ -42,7 +44,7 @@ MOVIES_DIRECTOR = 'movies-director.htm'
 MOVIES_STATS = 'movies-stats.htm'
 
 
-# -- Pass 1: extract data from title.basics.tsv.gz
+# -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
 
 
 @cache
@@ -101,7 +103,7 @@ def titles_index():
     return titles
 
 
-# -- Pass 2: make json records and download default movie cover if required
+# -- Pass 2: make json records and download default movie cover if required ---
 
 
 def title_imdb_id(title, year=None):
@@ -318,7 +320,7 @@ def create_missing_records(rep, forcejson=False):
     print('movie_found', movie_found)
 
 
-# -- Pass 3: make html files and thumbnails
+# -- Pass 3: make gallery html files and thumbnails ---------------------------
 
 
 def load_records(rep):
@@ -352,6 +354,7 @@ def urlencode(url):
     return url
 
 
+MENU = '<iframe src="%s" height=200px style="position: fixed; top: 20px; right: 40px; border-style: none!important;"></iframe>'
 ONCLICK = "window.open('%s', '_self')"
 IMAGE = f'<img class="cover" src="%s" alt="%s cover" title="%s" onclick="{ONCLICK}">'
 
@@ -413,6 +416,7 @@ def make_gallery_page(rep, pagename, content):
     template_fullname = os.path.join(os.path.dirname(__file__), TEMPLATE_GALLERY)
     with open(template_fullname, encoding='utf-8') as f:
         template = f.read()
+    template = template.replace('{{menu}}', MENU % 'menu.htm')
     template = template.replace('{{content}}', '\n'.join(content))
 
     with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
@@ -500,36 +504,6 @@ def make_director_page(rep, records, forcethumb):
     make_gallery_page(rep, MOVIES_DIRECTOR, content)
 
 
-STATS_TEMPLATE = '''
-<html>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-<title>%s</title>
-<link rel="icon" href="Movies-icon.png" />
-<style type="text/css">
-body {
-  font: normal 14px Verdana, Arial, sans-serif;
-}
-td {
-  padding-left: 15px;
-  padding-right: 15px;
-  text-align: right;
-}
-</style>\
-<base target="_parent"></base>
-</head>
-
-<body>
-<div style="width: 95%%; margin-left: auto; margin-right: auto">\
-<table>
-{{content}}
-</table>
-</div>
-</body>
-</html>
-'''
-
-
 def space_thousands(n):
     return f'{n:,}'.replace(',', ' ')
 
@@ -537,7 +511,7 @@ def space_thousands(n):
 def make_stats_page(rep, records):
     rows = []
     total = 0
-    for record in records:
+    for index, record in enumerate(records, 1):
         data = (
             record['title'],
             record['year'],
@@ -545,14 +519,23 @@ def make_stats_page(rep, records):
             record['height'],
             space_thousands(record["filesize"])
         )
-        rows.extend(['<tr>'] + [f'<td>{_}</td>' for _ in data] + ['</tr>'])
+        rows.extend(['<tr>'] + [f'<td class="left">{index}</td>'] + [f'<td>{_}</td>' for _ in data] + ['</tr>'])
         total += record["filesize"]
 
     data = ('Total', '', '', '', space_thousands(total))
     rows.extend(['<tr>'] + [f'<td>{_}</td>' for _ in data] + ['</tr>'])
-    content = STATS_TEMPLATE.replace('{{content}}', '\n'.join(rows))
+
+    with open(os.path.join(os.path.dirname(__file__), TEMPLATE_STATS), encoding='utf-8') as f:
+        template = f.read()
+
+    template = template.replace('{{menu}}', MENU % 'menu.htm')
+    content = template.replace('{{content}}', '\n'.join(rows))
+
     with open(os.path.join(rep, '.gallery', MOVIES_STATS), 'wt', encoding='utf-8') as f:
         print(content, file=f)
+
+
+# -- Pass 4: make movie html files --------------------------------------------
 
 
 def make_li_list(liste):
@@ -605,11 +588,17 @@ def actors_content(record):
     return content
 
 
-def movie_record_html(record, template, director_movies, actor_movies):
+def relpath_to_menu(rep, record):
+    nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
+    return '../' * nback + '.gallery/menu.htm'
+
+
+def movie_record_html(rep, record, template, director_movies, actor_movies):
     movie_name = os.path.join(record['dirpath'], record['filename'])
     image_basename = record['barename'] + '.jpg'
 
     html = template[:]
+    html = html.replace('{{menu}}', MENU % relpath_to_menu(rep, record))
     html = html.replace('{{cover}}', image_basename)
     html = html.replace('{{title}}', record['title'])
     html = html.replace('{{year}}', str(record['year']))
@@ -662,7 +651,7 @@ def movie_record_html(record, template, director_movies, actor_movies):
     return html
 
 
-def make_movie_pages(records):
+def make_movie_pages(rep, records):
     with open(os.path.join(os.path.dirname(__file__), TEMPLATE_MOVIE), encoding='utf-8') as f:
         template = f.read()
 
@@ -679,7 +668,7 @@ def make_movie_pages(records):
         actor_movies[actor] = sorted(movies)
 
     for record in records:
-        html = movie_record_html(record, template, director_movies, actor_movies)
+        html = movie_record_html(rep, record, template, director_movies, actor_movies)
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
         with open(html_name, 'wt', encoding='utf-8') as f:
@@ -694,11 +683,12 @@ def make_html_pages(rep, forcethumb):
     make_alpha_page(rep, records, forcethumb=False)
     make_director_page(rep, records, forcethumb=False)
     make_stats_page(rep, records)
-    make_movie_pages(records)
+    make_movie_pages(rep, records)
     shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
+    shutil.copy(os.path.join(os.path.dirname(__file__), 'menu.htm'), os.path.join(rep, '.gallery'))
 
 
-# -- Test functions
+# -- Test functions -----------------------------------------------------------
 
 
 def clean(rep):
@@ -742,7 +732,7 @@ def stats_images(rep):
     print('Mean image ratio', sum(ratios) / len(ratios))
 
 
-# -- Main
+# -- Main ---------------------------------------------------------------------
 
 
 def parse_command_line():
