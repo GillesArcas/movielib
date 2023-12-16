@@ -571,13 +571,10 @@ def wikipedia_link(record):
 
 
 def google_link(record):
-    if 0:  # record['imdb_id'] or record['wikipedia_url']:
-        return 'class="hidden"'
-    else:
-        search =  re.sub(r'[\W ]+', ' ', record['title'], flags=re.U)
-        words = search.split() + [str(record['year']), 'movie']
-        url = 'https://www.google.com/search?q=' + '+'.join(words)
-        return f'href="javascript:window.open(\'{url}\', \'_top\')"'
+    search =  re.sub(r'[\W ]+', ' ', record['title'], flags=re.U)
+    words = search.split() + [str(record['year']), 'movie']
+    url = 'https://www.google.com/search?q=' + '+'.join(words)
+    return f'href="javascript:window.open(\'{url}\', \'_top\')"'
 
 
 def actors_content(record):
