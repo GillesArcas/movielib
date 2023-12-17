@@ -29,8 +29,6 @@ import requests
 from PIL import Image
 from imdb import Cinemagoer
 
-import galerie
-
 
 MOVIE_TSV = 'movie.tsv'
 TITLES_INDEX = 'titlestsv.pickle'
@@ -42,6 +40,42 @@ MOVIES_YEAR = 'movies-year.htm'
 MOVIES_ALPHA = 'movies-alpha.htm'
 MOVIES_DIRECTOR = 'movies-director.htm'
 MOVIES_STATS = 'movies-stats.htm'
+
+
+# -- Helpers ------------------------------------------------------------------
+
+
+def thumbname(name, key):
+    return key + '-' + name + '.jpg'
+
+
+def size_thumbnail(width, height, maxdim):
+    if width >= height:
+        return maxdim, int(round(maxdim * height / width))
+    else:
+        return int(round(maxdim * width / height)), maxdim
+
+
+def make_thumbnail_image(args, image_name, thumb_name, size):
+    if os.path.exists(thumb_name) and args.forcethumb is False:
+        pass
+    else:
+        print('Making thumbnail:', thumb_name)
+        create_thumbnail_image(image_name, thumb_name, size)
+
+
+def create_thumbnail_image(image_name, thumb_name, size):
+    imgobj = Image.open(image_name)
+
+    if (imgobj.mode != 'RGBA'
+        and image_name.endswith('.jpg')
+        and not (image_name.endswith('.gif') and imgobj.info.get('transparency'))
+       ):
+        imgobj = imgobj.convert('RGBA')
+
+    imgobj.thumbnail(size, Image.LANCZOS)
+    imgobj = imgobj.convert('RGB')
+    imgobj.save(thumb_name)
 
 
 # -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
@@ -388,7 +422,7 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False, caption=False
     movie_name = os.path.join(record['dirpath'], record['filename'])
     image_basename = record['barename'] + '.jpg'
     image_name = os.path.join(record['dirpath'], image_basename)
-    thumb_basename = galerie.thumbname(image_basename, 'film')
+    thumb_basename = thumbname(image_basename, 'film')
     thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
     html_basename = record['barename'] + '.htm'
     html_name = os.path.join(record['dirpath'], html_basename)
@@ -398,8 +432,8 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False, caption=False
         args.forcethumb = True
         if os.path.isfile(image_name):
             width, height = Image.open(image_name).size
-            thumbsize = galerie.size_thumbnail(width, height, maxdim=300)
-            galerie.make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+            thumbsize = size_thumbnail(width, height, maxdim=300)
+            make_thumbnail_image(args, image_name, thumb_name, thumbsize)
         else:
             print('Warning: no image for', movie_name)
 
@@ -753,6 +787,7 @@ def parse_command_line():
 
 
 def main():
+    # breakpoint()
     parser, args = parse_command_line()
     if args.extract_movie_tsv:
         extract_movie_tsv()
@@ -769,4 +804,5 @@ def main():
         parser.print_help()
 
 
-main()
+if __name__ == '__main__':
+    main()
