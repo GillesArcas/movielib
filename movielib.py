@@ -28,6 +28,7 @@ from pathlib import Path
 import requests
 from PIL import Image
 from imdb import Cinemagoer
+from jinja2 import Environment, FileSystemLoader
 
 
 MOVIE_TSV = 'movie.tsv'
@@ -370,10 +371,10 @@ def load_records(rep):
             record['dirpath'] = dirpath
             record['filename'] = filename
             record['barename'] = barename
+            record['cover'] = barename + '.jpg'
             records.append(record)
 
     return records
-
 
 
 def escape_open_url(url):
@@ -420,7 +421,7 @@ def time_ordered(fn1, fn2):
 
 def make_movie_element(rep, record, thumb_width, forcethumb=False, caption=False):
     movie_name = os.path.join(record['dirpath'], record['filename'])
-    image_basename = record['barename'] + '.jpg'
+    image_basename = record['cover']
     image_name = os.path.join(record['dirpath'], image_basename)
     thumb_basename = thumbname(image_basename, 'film')
     thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
@@ -572,18 +573,6 @@ def make_stats_page(rep, records):
 # -- Pass 4: make movie html files --------------------------------------------
 
 
-def make_li_list(liste):
-    return '\n'.join([f'<li>{_}</li>' for _ in liste])
-
-
-OTHER_MOVIES = '''\
-<h3>Autres films de %s dans la collection</h3>
- <ul>
-    %s
-</ul>
-'''
-
-
 def year_title(record):
     return f"{record['year']}: {record['title']}"
 
@@ -611,80 +600,78 @@ def google_link(record):
     return f'href="javascript:window.open(\'{url}\', \'_top\')"'
 
 
-def actors_content(record):
-    content = make_li_list(record['cast'][:5] if record['cast'] else ['Non renseigné'])
-    if len(record['cast']) > 5:
-        li_more = '<li title="%s">...</li>' % ', '.join(record['cast'][5:])
-        content = content + li_more + '\n'
-    return content
-
-
 def relpath_to_menu(rep, record):
     nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
     return '../' * nback + '.gallery/menu.htm'
 
 
-def movie_record_html(rep, record, template, director_movies, actor_movies):
+def relpath_to_movie(rep, records, record, yearmovie, yearmovie_num):
+    nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
+    record_target = records[yearmovie_num[yearmovie]]
+    path = os.path.relpath(record_target['dirpath'], start=rep)
+    return os.path.join(*['../'] * nback, path, record_target['barename'] + '.htm')
+
+
+def movie_record_html(rep, records, record, yearmovie_num, director_movies, actor_movies, template):
     movie_name = os.path.join(record['dirpath'], record['filename'])
-    image_basename = record['barename'] + '.jpg'
 
-    html = template[:]
-    html = html.replace('{{menu}}', MENU % relpath_to_menu(rep, record))
-    html = html.replace('{{cover}}', image_basename)
-    html = html.replace('{{title}}', record['title'])
-    html = html.replace('{{year}}', str(record['year']))
-    html = html.replace('{{runtime}}', str(record['runtime']))
-    html = html.replace('{{width}}', str(record['width']))
-    html = html.replace('{{height}}', str(record['height']))
-    html = html.replace('{{filesize}}', space_thousands(record["filesize"]))
-
-    html = html.replace('{{cast}}', actors_content(record))
-
-    html = html.replace('{{movie_link}}', f'file:///{movie_name}')
-    html = html.replace('{{imdb_link}}', imdb_link(record))
-    html = html.replace('{{wikipedia_link}}', wikipedia_link(record))
-    html = html.replace('{{google_link}}', google_link(record))
-
-    if record['director']:
+    if not record['director']:
+        record['director_list'] = []
+    else:
         first_director = record['director'][0]
         other_directors = record['director'][1:]
+        if other_directors:
+            record['director_list'] = [first_director, ', '.join(other_directors)]
+        else:
+            record['director_list'] = [first_director]
+
+    if record['director']:
         othermovies1 = [_ for _ in director_movies[first_director] if year_title(record) != _]
         othermovies2 = set()
         for director in other_directors:
             othermovies2.update([_ for _ in director_movies[director] if year_title(record) != _])
-        othermovies1 = ['Aucun'] if not othermovies1 else sorted(othermovies1)
-        othermovies2 = ['Aucun'] if not othermovies2 else sorted(othermovies2)
+        othermovies1 = sorted(othermovies1)
+        othermovies2 = sorted(othermovies2)
+        record['dirothermovies'] = [othermovies1, othermovies2]
+        record['path_to_dirothermovies'] = [
+            [relpath_to_movie(rep, records, record, _, yearmovie_num) for _ in othermovies1],
+            [relpath_to_movie(rep, records, record, _, yearmovie_num) for _ in othermovies2],
+        ]
 
-        if other_directors:
-            html = html.replace('{{director}}', make_li_list([first_director, ', '.join(other_directors)]))
-        else:
-            html = html.replace('{{director}}', make_li_list([first_director]))
-
-        othermovieshtml = [OTHER_MOVIES % (first_director, make_li_list(othermovies1))]
-        if other_directors:
-            if len(other_directors) > 1:
-                other_directors = other_directors[:1] + ['etc.']
-            othermovieshtml.append(OTHER_MOVIES % (', '.join(other_directors), make_li_list(othermovies2)))
-
-        html = html.replace('{{other_movies}}', '\n'.join(othermovieshtml))
+    if not record['cast']:
+        record['actor_list'] = []
     else:
-        html = html.replace('{{director}}', make_li_list(['Non renseigné']))
-        html = html.replace('{{other_movies}}', '\n')
+        record['actor_list'] = record['cast'][:5]
+        if len(record['cast']) > 5:
+            record['actor_list'].append(', '.join(record['cast'][5:]))
 
-    liste = []
     if record['cast']:
+        record['castothermovies'] = []
         for actor in record['cast'][:5]:
-            actormovies = [_ for _ in actor_movies[actor] if year_title(record) != _]
-            if actormovies:
-                liste.append(OTHER_MOVIES % (actor, make_li_list(actormovies)))
-    html = html.replace('{{actormovies}}', '\n'.join(liste))
+            record['castothermovies'].append([_ for _ in actor_movies[actor] if year_title(record) != _])
+            record['path_to_castothermovies'] = []
+            for movies in record['castothermovies']:
+                record['path_to_castothermovies'].append([relpath_to_movie(rep, records, record, _, yearmovie_num) for _ in movies])
+
+    html = template.render(
+        title=record['title'],
+        menu=MENU % relpath_to_menu(rep, record),
+        movie_link=f'file:///{movie_name}',
+        imdb_link=imdb_link(record),
+        wikipedia_link=wikipedia_link(record),
+        google_link=google_link(record),
+        record=record,
+        zip=zip,
+        space_thousands=space_thousands,
+    )
 
     return html
 
 
 def make_movie_pages(rep, records):
-    with open(os.path.join(os.path.dirname(__file__), TEMPLATE_MOVIE), encoding='utf-8') as f:
-        template = f.read()
+    yearmovie_num = {}
+    for record in records:
+        yearmovie_num[year_title(record)] = record['movienum']
 
     director_movies = defaultdict(list)
     for record in records:
@@ -698,8 +685,12 @@ def make_movie_pages(rep, records):
     for actor, movies in actor_movies.items():
         actor_movies[actor] = sorted(movies)
 
+    file_loader = FileSystemLoader('')
+    env = Environment(loader=file_loader)
+    template = env.get_template('template-movie.htm')
+
     for record in records:
-        html = movie_record_html(rep, record, template, director_movies, actor_movies)
+        html = movie_record_html(rep, records, record, yearmovie_num, director_movies, actor_movies, template)
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
         with open(html_name, 'wt', encoding='utf-8') as f:
