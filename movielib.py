@@ -373,6 +373,8 @@ def load_records(rep):
             record['barename'] = barename
             record['cover'] = barename + '.jpg'
             record['year_title'] = f"{record['year']}: {record['title']}"
+            nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
+            record['relpath_to_root'] = '../' * nback
             records.append(record)
 
     return records
@@ -438,7 +440,8 @@ def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records,
         sorted_records=sorted_records,
         tags=tags,
         caption=caption,
-        menu=MENU % 'menu.htm'
+        menu=MENU % 'menu.htm',
+        icon=relpath_to_icon(record)
     )
     with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
         print(html, file=f)
@@ -560,16 +563,18 @@ def google_link(record):
     return f'href="javascript:window.open(\'{url}\', \'_top\')"'
 
 
-def relpath_to_menu(rep, record):
-    nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
-    return '../' * nback + '.gallery/menu.htm'
+def relpath_to_menu(record):
+    return record['relpath_to_root'] + '.gallery/menu.htm'
+
+
+def relpath_to_icon(record):
+    return record['relpath_to_root'] + '.gallery/movies-icon.png'
 
 
 def relpath_to_movie(rep, records, record, yearmovie, yearmovie_num):
-    nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
     record_target = records[yearmovie_num[yearmovie]]
     path = os.path.relpath(record_target['dirpath'], start=rep)
-    return os.path.join(*['../'] * nback, path, record_target['barename'] + '.htm')
+    return record['relpath_to_root'] + os.path.join(path, record_target['barename'] + '.htm')
 
 
 def movie_record_html(rep, records, record, yearmovie_num, director_movies, actor_movies, template):
@@ -614,12 +619,13 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
 
     html = template.render(
         title=record['title'],
-        menu=MENU % relpath_to_menu(rep, record),
+        menu=MENU % relpath_to_menu(record),
         movie_link=record['filename'],
         imdb_link=imdb_link(record),
         wikipedia_link=wikipedia_link(record),
         google_link=google_link(record),
         record=record,
+        icon=relpath_to_icon(record),
         zip=zip,
         space_thousands=space_thousands,
     )
@@ -667,6 +673,7 @@ def make_html_pages(rep, forcethumb):
     make_movie_pages(rep, records)
     shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
     shutil.copy(os.path.join(os.path.dirname(__file__), 'menu.htm'), os.path.join(rep, '.gallery'))
+    shutil.copy(os.path.join(os.path.dirname(__file__), 'movies-icon.png'), os.path.join(rep, '.gallery'))
 
 
 # -- Test functions -----------------------------------------------------------
