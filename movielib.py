@@ -572,8 +572,6 @@ def relpath_to_movie(rep, records, record, yearmovie, yearmovie_num):
 
 
 def movie_record_html(rep, records, record, yearmovie_num, director_movies, actor_movies, template):
-    movie_name = os.path.join(record['dirpath'], record['filename'])
-
     if not record['director']:
         record['director_list'] = []
     else:
@@ -616,7 +614,7 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
     html = template.render(
         title=record['title'],
         menu=MENU % relpath_to_menu(rep, record),
-        movie_link=f'file:///{movie_name}',
+        movie_link=record['filename'],
         imdb_link=imdb_link(record),
         wikipedia_link=wikipedia_link(record),
         google_link=google_link(record),
