@@ -475,8 +475,9 @@ def make_alpha_page(rep, records, forcethumb):
         movies_by_alpha[record['title'][0].upper()].append(record)
 
     tags = {}
-    for char in movies_by_alpha:
+    for char, movies in movies_by_alpha.items():
         tags[char] = char
+        movies_by_alpha[char] = sorted(movies, key=lambda rec: rec['title'])
     index = list(sorted(tags))
 
     make_gallery_page(MOVIES_ALPHA, rep, records, forcethumb, index, movies_by_alpha, tags, False)
