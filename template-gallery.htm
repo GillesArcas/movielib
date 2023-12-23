@@ -42,9 +42,36 @@ img.cover {
 
 <body>
 {{menu}}
+
 <div style="width: 95%; margin-left: auto; margin-right: auto">
-{{content}}
+{% if index %}
+    <h2>
+    {% for x in index %}
+        <a style="display:inline-table;" href="#{{x}}">{{x}}</a>
+    {% endfor %}
+    </h2>
+{% endif %}
+
+{% for key, records in sorted_records.items()|sort(attribute='0') %}
+    {% if tags[key] %}
+        <div id="{{tags[key]}}" style="visibility: hidden;"></div>
+    {% endif %}
+    {% if key %}
+        <h2>{{key}}</h2>
+    {% endif %}
+    {% for record in records %}
+        <span>
+        <img
+            class="cover"
+            src="{{record.thumb_path}}"
+            alt="{{record.title}} cover"
+            title="{{record.hover_text}}"
+            onclick="window.open('{{record.movie_page}}', '_self')" />
+        <p>{{record.year_title if caption else record.title}}</p>
+        </span>
+    {% endfor %}
+{% endfor %}
+
 </div>
 </body>
 </html>
-

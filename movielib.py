@@ -372,6 +372,7 @@ def load_records(rep):
             record['filename'] = filename
             record['barename'] = barename
             record['cover'] = barename + '.jpg'
+            record['year_title'] = f"{record['year']}: {record['title']}"
             records.append(record)
 
     return records
@@ -390,26 +391,6 @@ def urlencode(url):
 
 
 MENU = '<iframe src="%s" height=200px style="position: fixed; top: 20px; right: 40px; border-style: none!important;"></iframe>'
-ONCLICK = "window.open('%s', '_self')"
-IMAGE = f'<img class="cover" src="%s" alt="%s cover" title="%s" onclick="{ONCLICK}">'
-
-
-def image_element(record, rep, _, thumb_basename, html_name):
-    return IMAGE % (
-        urlencode(os.path.join('.thumbnails', thumb_basename)),
-        record['title'],
-        f"{record['title']}, {record['year']}, {', '.join(record['director'])}",
-        escape_open_url(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
-    )
-
-
-VIDPOSTCAPTION = '''\
-<span>
-%s
-<p>%s</p>
-</span>
-%s
-'''
 
 
 def time_ordered(fn1, fn2):
@@ -419,14 +400,18 @@ def time_ordered(fn1, fn2):
     return os.path.getmtime(fn1) < os.path.getmtime(fn2)
 
 
-def make_movie_element(rep, record, thumb_width, forcethumb=False, caption=False):
+def update_movie_record(rep, record, forcethumb=False):
     movie_name = os.path.join(record['dirpath'], record['filename'])
     image_basename = record['cover']
     image_name = os.path.join(record['dirpath'], image_basename)
-    thumb_basename = thumbname(image_basename, 'film')
+    thumb_basename = thumbname(record['cover'], 'film')
     thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
     html_basename = record['barename'] + '.htm'
     html_name = os.path.join(record['dirpath'], html_basename)
+
+    record['thumb_path'] = os.path.join('.thumbnails', thumb_basename)
+    record['hover_text'] = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
+    record['movie_page'] = escape_open_url(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
 
     if forcethumb or os.path.isfile(thumb_name) is False or time_ordered(image_name, thumb_name) is False:
         args = types.SimpleNamespace()
@@ -438,31 +423,32 @@ def make_movie_element(rep, record, thumb_width, forcethumb=False, caption=False
         else:
             print('Warning: no image for', movie_name)
 
-    movie_element = VIDPOSTCAPTION % (
-        image_element(record, rep, thumb_width, thumb_basename, html_name),
-        record['caption'] if caption else record['title'],
-        ''
+
+def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records, tags, caption):
+    for record in records:
+        update_movie_record(rep, record, forcethumb=forcethumb)
+
+    file_loader = FileSystemLoader('')
+    env = Environment(loader=file_loader)
+    template = env.get_template('template-gallery.htm')
+
+    html = template.render(
+        records=records,
+        index=index,
+        sorted_records=sorted_records,
+        tags=tags,
+        caption=caption,
+        menu=MENU % 'menu.htm'
     )
-
-    return movie_element
-
-
-def make_gallery_page(rep, pagename, content):
-    template_fullname = os.path.join(os.path.dirname(__file__), TEMPLATE_GALLERY)
-    with open(template_fullname, encoding='utf-8') as f:
-        template = f.read()
-    template = template.replace('{{menu}}', MENU % 'menu.htm')
-    template = template.replace('{{content}}', '\n'.join(content))
-
     with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
-        print(template, file=f)
+        print(html, file=f)
 
 
 def make_vrac_page(rep, records, forcethumb):
-    content = []
-    for record in records:
-        content.append(make_movie_element(rep, record, 160, forcethumb))
-    make_gallery_page(rep, MOVIES_VRAC, content)
+    sorted_records = {None: records}
+    tags = {None: None}
+    index = None
+    make_gallery_page(MOVIES_VRAC, rep, records, forcethumb, index, sorted_records, tags, False)
 
 
 def make_year_page(rep, records, forcethumb):
@@ -471,24 +457,16 @@ def make_year_page(rep, records, forcethumb):
         movies_by_year[record['year']].append(record)
 
     first_year_in_decade = {}
+    tags = {}
     for year in sorted(movies_by_year):
         if first_year_in_decade.get(year - year % 10, None) is None:
             first_year_in_decade[year - year % 10] = year
+            tags[year] = year - year % 10
+        else:
+            tags[year] = None
+    index = list(sorted(first_year_in_decade))
 
-    content = []
-    content.append('<h2>')
-    for year in sorted(first_year_in_decade):
-        content.append(f'<a style="display:inline-table;" href="#{year}">{year}</a>')
-    content.append('</h2>')
-
-    for year, year_records in sorted(movies_by_year.items()):
-        if year == first_year_in_decade[year - year % 10]:
-            content.append(f'<div id="{year - year % 10}" style="visibility: hidden;"></div>')
-        content.append(f'<h2>{year}</h2>')
-        for record in year_records:
-            content.append(make_movie_element(rep, record, 160, forcethumb))
-
-    make_gallery_page(rep, MOVIES_YEAR, content)
+    make_gallery_page(MOVIES_YEAR, rep, records, forcethumb, index, movies_by_year, tags, False)
 
 
 def make_alpha_page(rep, records, forcethumb):
@@ -496,19 +474,12 @@ def make_alpha_page(rep, records, forcethumb):
     for record in records:
         movies_by_alpha[record['title'][0].upper()].append(record)
 
-    content = []
-    content.append('<h2>')
-    for char in sorted(movies_by_alpha):
-        content.append(f'<a style="display:inline-table;" href="#{char}">{char}</a>')
-    content.append('</h2>')
+    tags = {}
+    for char in movies_by_alpha:
+        tags[char] = char
+    index = list(sorted(tags))
 
-    for char, char_records in sorted(movies_by_alpha.items()):
-        content.append(f'<div id="{char}" style="visibility: hidden;"></div>')
-        content.append(f'<h2>{char}</h2>')
-        for record in char_records:
-            content.append(make_movie_element(rep, record, 160, forcethumb))
-
-    make_gallery_page(rep, MOVIES_ALPHA, content)
+    make_gallery_page(MOVIES_ALPHA, rep, records, forcethumb, index, movies_by_alpha, tags, False)
 
 
 def make_director_page(rep, records, forcethumb):
@@ -519,24 +490,16 @@ def make_director_page(rep, records, forcethumb):
             record['caption'] = f"{record['year']}: {record['title']}"
 
     first_director = {}
+    tags = {}
     for director in sorted(movies_by_director):
         if first_director.get(director[0], None) is None:
             first_director[director[0]] = director
+            tags[director] = director[0]
+        else:
+            tags[director] = None
+    index = list(sorted(first_director))
 
-    content = []
-    content.append('<h2>')
-    for char in sorted(first_director):
-        content.append(f'<a style="display:inline-table;" href="#{char}">{char}</a>')
-    content.append('</h2>')
-
-    for director, dir_records in sorted(movies_by_director.items()):
-        if director == first_director[director[0]]:
-            content.append(f'<div id="{director[0]}" style="visibility: hidden;"></div>')
-        content.append(f'<h2>{director}</h2>')
-        for record in sorted(dir_records, key=lambda rec: rec['caption']):
-            content.append(make_movie_element(rep, record, 160, forcethumb, caption=True))
-
-    make_gallery_page(rep, MOVIES_DIRECTOR, content)
+    make_gallery_page(MOVIES_DIRECTOR, rep, records, forcethumb, index, movies_by_director, tags, True)
 
 
 def space_thousands(n):
@@ -571,10 +534,6 @@ def make_stats_page(rep, records):
 
 
 # -- Pass 4: make movie html files --------------------------------------------
-
-
-def year_title(record):
-    return f"{record['year']}: {record['title']}"
 
 
 def imdb_link(record):
@@ -626,10 +585,10 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
             record['director_list'] = [first_director]
 
     if record['director']:
-        othermovies1 = [_ for _ in director_movies[first_director] if year_title(record) != _]
+        othermovies1 = [_ for _ in director_movies[first_director] if record['year_title'] != _]
         othermovies2 = set()
         for director in other_directors:
-            othermovies2.update([_ for _ in director_movies[director] if year_title(record) != _])
+            othermovies2.update([_ for _ in director_movies[director] if record['year_title'] != _])
         othermovies1 = sorted(othermovies1)
         othermovies2 = sorted(othermovies2)
         record['dirothermovies'] = [othermovies1, othermovies2]
@@ -648,10 +607,11 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
     if record['cast']:
         record['castothermovies'] = []
         for actor in record['cast'][:5]:
-            record['castothermovies'].append([_ for _ in actor_movies[actor] if year_title(record) != _])
+            record['castothermovies'].append([_ for _ in actor_movies[actor] if record['year_title'] != _])
             record['path_to_castothermovies'] = []
             for movies in record['castothermovies']:
-                record['path_to_castothermovies'].append([relpath_to_movie(rep, records, record, _, yearmovie_num) for _ in movies])
+                relpaths = [relpath_to_movie(rep, records, record, _, yearmovie_num) for _ in movies]
+                record['path_to_castothermovies'].append(relpaths)
 
     html = template.render(
         title=record['title'],
@@ -671,17 +631,17 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
 def make_movie_pages(rep, records):
     yearmovie_num = {}
     for record in records:
-        yearmovie_num[year_title(record)] = record['movienum']
+        yearmovie_num[record['year_title']] = record['movienum']
 
     director_movies = defaultdict(list)
     for record in records:
         for _ in record['director']:
-            director_movies[_].append(year_title(record))
+            director_movies[_].append(record['year_title'])
 
     actor_movies = defaultdict(list)
     for record in records:
         for _ in record['cast']:
-            actor_movies[_].append(year_title(record))
+            actor_movies[_].append(record['year_title'])
     for actor, movies in actor_movies.items():
         actor_movies[actor] = sorted(movies)
 
