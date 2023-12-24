@@ -441,7 +441,7 @@ def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records,
         tags=tags,
         caption=caption,
         menu=MENU % 'menu.htm',
-        icon=relpath_to_icon(record)
+        icon='movies-icon.png'
     )
     with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
         print(html, file=f)
@@ -511,30 +511,31 @@ def space_thousands(n):
 
 
 def make_stats_page(rep, records):
-    rows = []
+    data = []
     total = 0
     for index, record in enumerate(records, 1):
-        data = (
+        data.append((
             record['title'],
             record['year'],
             record['width'],
             record['height'],
             space_thousands(record["filesize"])
-        )
-        rows.extend(['<tr>'] + [f'<td class="left">{index}</td>'] + [f'<td>{_}</td>' for _ in data] + ['</tr>'])
+        ))
         total += record["filesize"]
 
-    data = ('Total', '', '', '', space_thousands(total))
-    rows.extend(['<tr>'] + [f'<td>{_}</td>' for _ in data] + ['</tr>'])
+    data.append(('Total', '', '', '', space_thousands(total)))
 
-    with open(os.path.join(os.path.dirname(__file__), TEMPLATE_STATS), encoding='utf-8') as f:
-        template = f.read()
+    file_loader = FileSystemLoader('')
+    env = Environment(loader=file_loader)
+    template = env.get_template('template-stats.htm')
 
-    template = template.replace('{{menu}}', MENU % 'menu.htm')
-    content = template.replace('{{content}}', '\n'.join(rows))
-
+    html = template.render(
+        data=data,
+        menu=MENU % 'menu.htm',
+        icon='movies-icon.png'
+    )
     with open(os.path.join(rep, '.gallery', MOVIES_STATS), 'wt', encoding='utf-8') as f:
-        print(content, file=f)
+        print(html, file=f)
 
 
 # -- Pass 4: make movie html files --------------------------------------------
