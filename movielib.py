@@ -40,6 +40,7 @@ MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
 MOVIES_ALPHA = 'movies-alpha.htm'
 MOVIES_DIRECTOR = 'movies-director.htm'
+MOVIES_ACTOR = 'movies-actor.htm'
 MOVIES_STATS = 'movies-stats.htm'
 
 
@@ -380,6 +381,57 @@ def load_records(rep):
     return records
 
 
+def relevant_cast(record, records, _, _):
+    """
+    v1:
+    An actor is taken into account for a movie if:
+    - he appears in the p first actors in the cast list,
+    - or he appears in the q (q > p) first actors and he appears in at least one
+      other movie in the database.
+    """
+    p = 5
+    q = 10
+    cast = record['cast'][:p]
+    for actor in record['cast'][p:q]:
+        if len(actor_movies[actor]) >= 2:
+            cast.append(actor)
+    return cast
+
+
+def relevant_cast(record, records, actor_movies, yearmovie_num):
+    """
+    v2:
+    An actor is taken into account for a movie if:
+    - he appears in the p first actors in the cast list,
+    - or he appears in the q (q > p) first actors and he appears in the p first
+      actors of at least one other movie in the database.
+    """
+    p = 5
+    q = 10
+    cast = record['cast'][:p]
+    for actor in record['cast'][p:q]:
+        for yeartitle in actor_movies[actor]:
+            cast2 = records[yearmovie_num[yeartitle]]['cast']
+            if yeartitle != record['year_title'] and cast2.index(actor) <= p:
+                cast.append(actor)
+                break
+    return cast
+
+
+def load_main_cast(rep, records):
+    actor_movies = defaultdict(list)
+    yearmovie_num = {}
+    for record in records:
+        yearmovie_num[record['year_title']] = record['movienum']
+        for _ in record['cast']:
+            actor_movies[_].append(record['year_title'])
+    for actor, movies in actor_movies.items():
+        actor_movies[actor] = sorted(movies)
+
+    for record in records:
+        record['main_cast'] = relevant_cast(record, records, actor_movies, yearmovie_num)
+
+
 def escape_open_url(url):
     url = url.replace('\\', '/')
     url = url.replace("'", "\\'")
@@ -390,9 +442,6 @@ def urlencode(url):
     url = url.replace('\\', '/')
     url = url.replace(' ', '%20')
     return url
-
-
-MENU = '<iframe src="%s" height=200px style="position: fixed; top: 20px; right: 40px; border-style: none!important;"></iframe>'
 
 
 def time_ordered(fn1, fn2):
@@ -424,6 +473,9 @@ def update_movie_record(rep, record, forcethumb=False):
             make_thumbnail_image(args, image_name, thumb_name, thumbsize)
         else:
             print('Warning: no image for', movie_name)
+
+
+MENU = '<iframe src="%s" height=220px style="position: fixed; top: 20px; right: 40px; border-style: none!important;"></iframe>'
 
 
 def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records, tags, caption):
@@ -491,7 +543,6 @@ def make_director_page(rep, records, forcethumb):
     for record in records:
         for director in record['director']:
             movies_by_director[director].append(record)
-            record['caption'] = f"{record['year']}: {record['title']}"
 
     first_director = {}
     tags = {}
@@ -504,6 +555,26 @@ def make_director_page(rep, records, forcethumb):
     index = list(sorted(first_director))
 
     make_gallery_page(MOVIES_DIRECTOR, rep, records, forcethumb, index, movies_by_director, tags, True)
+
+
+def make_actor_page(rep, records, forcethumb):
+    movies_by_actor = defaultdict(list)
+    for record in records:
+        for actor in record['main_cast']:
+            movies_by_actor[actor].append(record)
+
+    first_actor = {}
+    tags = {}
+    for actor in sorted(movies_by_actor):
+        movies_by_actor[actor] = sorted(movies_by_actor[actor], key=lambda rec: rec['year_title'])
+        if first_actor.get(actor[0], None) is None:
+            first_actor[actor[0]] = actor
+            tags[actor] = actor[0]
+        else:
+            tags[actor] = None
+    index = list(sorted(first_actor))
+
+    make_gallery_page(MOVIES_ACTOR, rep, records, forcethumb, index, movies_by_actor, tags, True)
 
 
 def space_thousands(n):
@@ -605,13 +676,14 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
     if not record['cast']:
         record['actor_list'] = []
     else:
-        record['actor_list'] = record['cast'][:5]
-        if len(record['cast']) > 5:
-            record['actor_list'].append(', '.join(record['cast'][5:]))
+        maincast = record['main_cast']
+        record['actor_list'] = maincast
+        if len(record['cast']) > len(maincast):
+            record['actor_list'].append(', '.join([_ for _ in record['cast'] if _ not in maincast]))
 
     if record['cast']:
         record['castothermovies'] = []
-        for actor in record['cast'][:5]:
+        for actor in maincast:
             record['castothermovies'].append([_ for _ in actor_movies[actor] if record['year_title'] != _])
             record['path_to_castothermovies'] = []
             for movies in record['castothermovies']:
@@ -626,7 +698,7 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
         wikipedia_link=wikipedia_link(record),
         google_link=google_link(record),
         record=record,
-        icon=relpath_to_icon(record),
+        icon=record['cover'],  # relpath_to_icon(record),
         zip=zip,
         space_thousands=space_thousands,
     )
@@ -666,10 +738,12 @@ def make_movie_pages(rep, records):
 def make_html_pages(rep, forcethumb):
     os.makedirs(os.path.join(rep, '.gallery', '.thumbnails'), exist_ok=True)
     records = load_records(rep)
+    load_main_cast(rep, records)
     make_vrac_page(rep, records, forcethumb=forcethumb)
     make_year_page(rep, records, forcethumb=False)
     make_alpha_page(rep, records, forcethumb=False)
     make_director_page(rep, records, forcethumb=False)
+    make_actor_page(rep, records, forcethumb=False)
     make_stats_page(rep, records)
     make_movie_pages(rep, records)
     shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
@@ -721,6 +795,17 @@ def stats_images(rep):
     print('Mean image ratio', sum(ratios) / len(ratios))
 
 
+def stats_cast(rep):
+    records = load_records(rep)
+    movies_by_actor = defaultdict(list)
+    for record in records:
+        for index, actor in enumerate(record['cast'][:10], 1):
+            movies_by_actor[actor].append(index)
+
+    for actor, ranks in sorted(movies_by_actor.items()):
+        print(actor, sorted(ranks))
+
+
 # -- Main ---------------------------------------------------------------------
 
 
@@ -745,7 +830,6 @@ def parse_command_line():
 
 
 def main():
-    # breakpoint()
     parser, args = parse_command_line()
     if args.extract_movie_tsv:
         extract_movie_tsv()
@@ -757,7 +841,8 @@ def main():
         create_missing_records(args.rep, args.force_json)
         make_html_pages(args.rep, args.force_thumb)
     elif args.test:
-        test()
+        # test()
+        stats_cast('d:/films')
     else:
         parser.print_help()
 

@@ -78,7 +78,7 @@ a.disabled {
     <li>Non renseigné</li>
 {% else %}
     {% for actors in record.actor_list %}
-        {% if loop.index <= 5 %}
+        {% if loop.index < loop.length %}
             <li>{{actors}}</li>
         {% else %}
             <li title="{{actors}}">...</li>
