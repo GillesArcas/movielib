@@ -381,7 +381,7 @@ def load_records(rep):
     return records
 
 
-def relevant_cast(record, records, _, _):
+def relevant_cast(record, records, actor_movies, yearmovie_num):
     """
     v1:
     An actor is taken into account for a movie if:

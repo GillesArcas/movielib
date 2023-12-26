@@ -77,11 +77,11 @@ a.disabled {
 {% if not record.actor_list %}
     <li>Non renseigné</li>
 {% else %}
-    {% for actors in record.actor_list %}
+    {% for actor in record.actor_list %}
         {% if loop.index < loop.length %}
-            <li>{{actors}}</li>
+            <li><a href="https://en.wikipedia.org/wiki/{{actor}}">{{actor}}</a></li>
         {% else %}
-            <li title="{{actors}}">...</li>
+            <li title="{{actor}}">...</li>
         {% endif %}
     {% endfor %}
 {% endif %}
