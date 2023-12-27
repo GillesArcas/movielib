@@ -20,6 +20,7 @@ import shutil
 import gzip
 import argparse
 import tempfile
+import glob
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 from functools import cache
@@ -33,6 +34,7 @@ from jinja2 import Environment, FileSystemLoader
 
 MOVIE_TSV = 'movie.tsv'
 TITLES_INDEX = 'titlestsv.pickle'
+MENUFILE = 'menu.htm'
 TEMPLATE_GALLERY = 'template-gallery.htm'
 TEMPLATE_STATS = 'template-stats.htm'
 TEMPLATE_MOVIE = 'template-movie.htm'
@@ -177,7 +179,7 @@ def extract_image_from_movie(filename, imagename, size, delay):
     sizearg = '%dx%d' % (size, size)
     command = 'ffmpeg -y -v error -itsoffset -%d -i "%s" -vcodec mjpeg -vframes 1 -an -f rawvideo -s %s "%s"'
     command = command % (delay, filename, sizearg, imagename)
-    result = os.system(command)
+    return os.system(command)
 
 
 def get_title(name, movie):
@@ -381,9 +383,8 @@ def load_records(rep):
     return records
 
 
-def relevant_cast(record, records, actor_movies, yearmovie_num):
+def relevant_cast_v1(record, actor_movies):
     """
-    v1:
     An actor is taken into account for a movie if:
     - he appears in the p first actors in the cast list,
     - or he appears in the q (q > p) first actors and he appears in at least one
@@ -400,7 +401,6 @@ def relevant_cast(record, records, actor_movies, yearmovie_num):
 
 def relevant_cast(record, records, actor_movies, yearmovie_num):
     """
-    v2:
     An actor is taken into account for a movie if:
     - he appears in the p first actors in the cast list,
     - or he appears in the q (q > p) first actors and he appears in the p first
@@ -418,7 +418,7 @@ def relevant_cast(record, records, actor_movies, yearmovie_num):
     return cast
 
 
-def load_main_cast(rep, records):
+def load_main_cast(records):
     actor_movies = defaultdict(list)
     yearmovie_num = {}
     for record in records:
@@ -492,7 +492,7 @@ def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records,
         sorted_records=sorted_records,
         tags=tags,
         caption=caption,
-        menu=MENU % 'menu.htm',
+        menu=MENU % MENUFILE,
         icon='movies-icon.png'
     )
     with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
@@ -584,7 +584,7 @@ def space_thousands(n):
 def make_stats_page(rep, records):
     data = []
     total = 0
-    for index, record in enumerate(records, 1):
+    for record in records:
         data.append((
             record['title'],
             record['year'],
@@ -602,7 +602,7 @@ def make_stats_page(rep, records):
 
     html = template.render(
         data=data,
-        menu=MENU % 'menu.htm',
+        menu=MENU % MENUFILE,
         icon='movies-icon.png'
     )
     with open(os.path.join(rep, '.gallery', MOVIES_STATS), 'wt', encoding='utf-8') as f:
@@ -738,7 +738,7 @@ def make_movie_pages(rep, records):
 def make_html_pages(rep, forcethumb):
     os.makedirs(os.path.join(rep, '.gallery', '.thumbnails'), exist_ok=True)
     records = load_records(rep)
-    load_main_cast(rep, records)
+    load_main_cast(records)
     make_vrac_page(rep, records, forcethumb=forcethumb)
     make_year_page(rep, records, forcethumb=False)
     make_alpha_page(rep, records, forcethumb=False)
@@ -747,8 +747,9 @@ def make_html_pages(rep, forcethumb):
     make_stats_page(rep, records)
     make_movie_pages(rep, records)
     shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
-    shutil.copy(os.path.join(os.path.dirname(__file__), 'menu.htm'), os.path.join(rep, '.gallery'))
+    shutil.copy(os.path.join(os.path.dirname(__file__), MENUFILE), os.path.join(rep, '.gallery'))
     shutil.copy(os.path.join(os.path.dirname(__file__), 'movies-icon.png'), os.path.join(rep, '.gallery'))
+    shutil.copy(os.path.join(os.path.dirname(__file__), 'top-icon.png'), os.path.join(rep, '.gallery'))
 
 
 # -- Test functions -----------------------------------------------------------
@@ -809,6 +810,14 @@ def stats_cast(rep):
 # -- Main ---------------------------------------------------------------------
 
 
+def lang_choices():
+    choices = []
+    for x in glob.glob('menu-*.htm'):
+        match = re.match(r'menu-(\w+)\.htm', x)
+        choices.append(match[1])
+    return choices
+
+
 def parse_command_line():
     parser = argparse.ArgumentParser(add_help=True, usage=__doc__)
     xgroup = parser.add_mutually_exclusive_group()
@@ -817,6 +826,7 @@ def parse_command_line():
     xgroup.add_argument('--make_pages', action='store', metavar='<movies rep>')
     xgroup.add_argument('--update', action='store', metavar='<movies rep>')
     xgroup.add_argument('--test', action='store_true')
+    parser.add_argument('--language', action='store', choices=lang_choices(), default='EN')
     parser.add_argument('--force_json', action='store_true', default=False)
     parser.add_argument('--force_thumb', action='store_true', default=False)
     args = parser.parse_args()
@@ -826,6 +836,9 @@ def parse_command_line():
         args.rep = args.make_pages
     if args.update:
         args.rep = args.update
+
+    shutil.copy(f'menu-{args.language}.htm', MENU)
+    shutil.copy(f'template-movie-{args.language}.htm', TEMPLATE_MOVIE)
     return parser, args
 
 

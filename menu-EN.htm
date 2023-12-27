@@ -1,0 +1,56 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<style type="text/css">
+body {
+  font: normal 14px Verdana, Arial, sans-serif;
+}
+.dropdown {
+  display: inline-block;
+  position: relative;
+}
+.dropdown-content {
+  display: none;
+  position: absolute;
+  width: 100%;
+  overflow: auto;
+  box-shadow: 0px 10px 10px 0px rgba(0,0,0,0.4);
+  background-color: white;
+}
+.dropdown:hover .dropdown-content {
+  display: block;
+}
+.dropdown-content a {
+  display: block;
+  color: #000000;
+  padding: 5px;
+  text-decoration: none;
+}
+.dropdown-content a:hover {
+  color: #FFFFFF;
+  background-color: #00A4BD;
+}
+.imgbutton {
+  //display: block;
+  //margin-left: auto;
+}
+</style>
+<base target="_parent"></base>
+</head>
+
+<body>
+<div class="dropdown" style="width: 100%; position: fixed; width: 130px; top: 0; right: 0;">
+  <img src="menu-right.png"/>
+  <div class="dropdown-content">
+  <a href="movies-vrac.htm">Storage order</a>
+  <a href="movies-year.htm">Sor by year</a>
+  <a href="movies-alpha.htm">Alphabetical order</a>
+  <a href="movies-director.htm">Sort by director</a>
+  <a href="movies-actor.htm">Sort by actor</a>
+  <a href="movies-stats.htm">Statistics</a>
+  </div>
+</div>
+</body>
+</html>
+
