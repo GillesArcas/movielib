@@ -303,6 +303,8 @@ def create_missing_records(rep, forcejson=False):
     Find recursively all movies in rep. Create json file (with same name as
     movie) if absent. Fill record with imdb data if imdb id can be found, plus
     data relative to file.
+    forcejson enables to reset content (mainly for dev). Records without IMDB
+    id are ignored as their content is assumed to be completed manually.
     """
     ia = Cinemagoer()
     movie_number = 0
@@ -313,8 +315,15 @@ def create_missing_records(rep, forcejson=False):
         movie_number += 1
 
         jsonname = os.path.join(dirpath, barename + '.json')
-        if os.path.isfile(jsonname) and forcejson is False:
-            continue
+        if os.path.isfile(jsonname):
+            if forcejson:
+                with open(jsonname) as f:
+                    record = json.loads(f.read())
+                if record['imdb_id'] is None:
+                    continue
+            else:
+                continue
+
         new_movie_number += 1
 
         if re.search(r'\(\d\d\d\d\)\s*$', barename):
