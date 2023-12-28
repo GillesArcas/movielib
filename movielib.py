@@ -82,71 +82,12 @@ def create_thumbnail_image(image_name, thumb_name, size):
     imgobj.save(thumb_name)
 
 
-# -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
-
-
-@cache
-def cachedir():
-    tempdir = tempfile.gettempdir()
-    cache_dir = os.path.join(tempdir, 'movielib')
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-    return cache_dir
-
-
-def extract_movie_tsv():
-    """
-    Assume that the file title.basics.tsv.gz has been downloaded from
-    https://developer.imdb.com/non-commercial-datasets/ and that it contains
-    the file data.tsv.
-    """
-    with gzip.open('title.basics.tsv.gz', 'rb') as f_in:
-        with open(os.path.join(cachedir(), 'data.tsv'), 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-
-    titles = defaultdict(set)
-    with open(os.path.join(cachedir(), 'data.tsv'), encoding='utf-8') as f:
-        with open(os.path.join(cachedir(), MOVIE_TSV), 'wt', encoding='utf-8') as g:
-            print(f.readline(), end='', file=g)
-            for line in f:
-                if '\tmovie\t' in line:
-                    print(line, end='', file=g)
-                    tconst, _, primary_title, original_title, _, year, _, _, _ = line.split('\t')
-
-                    primary_title = primary_title.lower()
-                    primary_title = primary_title.replace(':', '')
-                    primary_title = primary_title.replace('.', '')
-                    primary_title = primary_title.replace('  ', ' ')
-                    original_title = original_title.lower()
-                    original_title = original_title.replace(':', '')
-                    original_title = original_title.replace('.', '')
-                    original_title = original_title.replace('  ', ' ')
-
-                    titles[primary_title].add(tconst)
-                    titles[original_title].add(tconst)
-                    titles[f'{primary_title}-{year}'].add(tconst)
-                    titles[f'{original_title}-{year}'].add(tconst)
-
-    os.remove(os.path.join(cachedir(), 'data.tsv'))
-    with open(os.path.join(cachedir(), TITLES_INDEX), 'wb') as f:
-        pickle.dump(dict(titles), f)
-
-
-@cache
-def titles_index():
-    print('Loading titles index...')
-    with open(os.path.join(cachedir(), TITLES_INDEX), 'rb') as f:
-        titles = pickle.load(f)
-    print('Loaded')
-    return titles
-
-
-# -- Pass 2: make json records and download default movie cover if required ---
-
-
-def title_imdb_id(title, year=None):
-    key = title if (year is None) else f'{title}-{year}'
-    return titles_index().get(key.lower(), None)
+def extract_image_from_movie(filename, imagename, size, delay):
+    # ffmpeg must be in path
+    sizearg = '%dx%d' % (size, size)
+    command = 'ffmpeg -y -v error -itsoffset -%d -i "%s" -vcodec mjpeg -vframes 1 -an -f rawvideo -s %s "%s"'
+    command = command % (delay, filename, sizearg, imagename)
+    return os.system(command)
 
 
 def get_dimensions(filename):
@@ -174,12 +115,90 @@ def get_duration(filename):
         return 'undefined'
 
 
-def extract_image_from_movie(filename, imagename, size, delay):
-    # ffmpeg must be in path
-    sizearg = '%dx%d' % (size, size)
-    command = 'ffmpeg -y -v error -itsoffset -%d -i "%s" -vcodec mjpeg -vframes 1 -an -f rawvideo -s %s "%s"'
-    command = command % (delay, filename, sizearg, imagename)
-    return os.system(command)
+# -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
+
+
+@cache
+def cachedir():
+    tempdir = tempfile.gettempdir()
+    cache_dir = os.path.join(tempdir, 'movielib')
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    return cache_dir
+
+
+def extract_movie_tsv():
+    """
+    Assume that the file title.basics.tsv.gz has been downloaded from
+    https://developer.imdb.com/non-commercial-datasets/ and that it contains
+    the file data.tsv.
+    """
+    titles_gz = os.path.join(cachedir(), 'title.basics.tsv.gz')
+    data_tsv = os.path.join(cachedir(), 'data.tsv')
+    movie_tsv = os.path.join(cachedir(), MOVIE_TSV)
+    titles_index = os.path.join(cachedir(), TITLES_INDEX)
+
+    if os.path.isfile(titles_gz) is False:
+        print('Downloading data from IMDB')
+        data = requests.get('https://datasets.imdbws.com/title.basics.tsv.gz', timeout=10).content
+        with open(titles_gz, 'wb') as handler:
+            handler.write(data)
+        print('Downloaded')
+
+    if os.path.isfile(data_tsv) is False:
+        print('Extracting data')
+        with gzip.open(titles_gz, 'rb') as f_in:
+            with open(data_tsv, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        print('Extracted')
+
+    if os.path.isfile(titles_index) is False:
+        titles = defaultdict(set)
+        with open(data_tsv, encoding='utf-8') as f:
+            with open(movie_tsv, 'wt', encoding='utf-8') as g:
+                print(f.readline(), end='', file=g)
+                for line in f:
+                    if '\tmovie\t' in line:
+                        print(line, end='', file=g)
+                        tconst, _, primary_title, original_title, _, year, _, _, _ = line.split('\t')
+
+                        primary_title = primary_title.lower()
+                        primary_title = primary_title.replace(':', '')
+                        primary_title = primary_title.replace('.', '')
+                        primary_title = primary_title.replace('  ', ' ')
+                        original_title = original_title.lower()
+                        original_title = original_title.replace(':', '')
+                        original_title = original_title.replace('.', '')
+                        original_title = original_title.replace('  ', ' ')
+
+                        titles[primary_title].add(tconst)
+                        titles[original_title].add(tconst)
+                        titles[f'{primary_title}-{year}'].add(tconst)
+                        titles[f'{original_title}-{year}'].add(tconst)
+
+        os.remove(os.path.join(cachedir(), 'data.tsv'))
+        with open(titles_index, 'wb') as f:
+            pickle.dump(dict(titles), f)
+
+
+@cache
+def titles_index():
+    if os.path.isfile(os.path.join(cachedir(), TITLES_INDEX)) is False:
+        extract_movie_tsv()
+
+    print('Loading titles index...')
+    with open(os.path.join(cachedir(), TITLES_INDEX), 'rb') as f:
+        titles = pickle.load(f)
+    print('Loaded')
+    return titles
+
+
+# -- Pass 2: make json records and download default movie cover if required ---
+
+
+def title_imdb_id(title, year=None):
+    key = title if (year is None) else f'{title}-{year}'
+    return titles_index().get(key.lower(), None)
 
 
 def get_title(name, movie):
@@ -764,7 +783,7 @@ def make_html_pages(rep, forcethumb):
 # -- Test functions -----------------------------------------------------------
 
 
-def clean(rep):
+def clean_json(rep):
     for dirpath, _, barename in movie_gen(rep):
         jsonname = os.path.join(dirpath, barename + '.json')
         imgname = os.path.join(dirpath, barename + '.jpg')
@@ -773,7 +792,19 @@ def clean(rep):
             os.remove(jsonname)
 
 
-def test():
+def list_extras(rep):
+    for dirpath, movie, barename in movie_gen(rep):
+        movie = os.path.join(dirpath, movie)
+        json = os.path.join(dirpath, barename + '.json')
+        html = os.path.join(dirpath, barename + '.htm')
+        img = os.path.join(dirpath, barename + '.jpg')
+        srt = os.path.join(dirpath, barename + '.srt')
+        for filename in glob.glob(os.path.join(dirpath, '*.*')):
+            if filename not in (movie, json, html, img, srt):
+                print(filename)
+
+
+def test_imdb(_):
     # create an instance of the Cinemagoer class
     ia = Cinemagoer()
 
@@ -816,6 +847,10 @@ def stats_cast(rep):
         print(actor, sorted(ranks))
 
 
+def test(funcname, rep):
+    globals()[funcname](rep)
+
+
 # -- Main ---------------------------------------------------------------------
 
 
@@ -834,10 +869,10 @@ def parse_command_line():
     xgroup.add_argument('--extract_data', action='store', metavar='<movies rep>')
     xgroup.add_argument('--make_pages', action='store', metavar='<movies rep>')
     xgroup.add_argument('--update', action='store', metavar='<movies rep>')
-    xgroup.add_argument('--test', action='store_true')
+    xgroup.add_argument('--test', action='store', nargs=2, help=argparse.SUPPRESS)
     parser.add_argument('--language', action='store', choices=lang_choices(), default='EN')
-    parser.add_argument('--force_json', action='store_true', default=False)
-    parser.add_argument('--force_thumb', action='store_true', default=False)
+    parser.add_argument('--force_json', action='store_true', default=False, help=argparse.SUPPRESS)
+    parser.add_argument('--force_thumb', action='store_true', default=False, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.extract_data:
         args.rep = args.extract_data
@@ -846,7 +881,7 @@ def parse_command_line():
     if args.update:
         args.rep = args.update
 
-    shutil.copy(f'menu-{args.language}.htm', MENU)
+    shutil.copy(f'menu-{args.language}.htm', MENUFILE)
     shutil.copy(f'template-movie-{args.language}.htm', TEMPLATE_MOVIE)
     return parser, args
 
@@ -863,8 +898,7 @@ def main():
         create_missing_records(args.rep, args.force_json)
         make_html_pages(args.rep, args.force_thumb)
     elif args.test:
-        # test()
-        stats_cast('d:/films')
+        test(*args.test)
     else:
         parser.print_help()
 

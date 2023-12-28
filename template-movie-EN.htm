@@ -66,8 +66,12 @@ a.disabled {
 {% if not record.director_list %}
     <li>Not specified</li>
 {% else %}
-    {% for directors in record.director_list %}
-        <li>{{directors}}</li>
+    {% for director in record.director_list %}
+        {% if loop.index <= 2 %}
+            <li><a href="https://en.wikipedia.org/wiki/{{director}}">{{director}}</a></li>
+        {% else %}
+            <li title="{{director}}">...</li>
+        {% endif %}
     {% endfor %}
 {% endif %}
 </ul>
