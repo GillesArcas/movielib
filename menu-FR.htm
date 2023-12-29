@@ -27,22 +27,24 @@ body {
   padding: 5px;
   text-decoration: none;
 }
+.dropdown-content img {
+  display: block;
+  padding: 0px;
+}
 .dropdown-content a:hover {
   color: #FFFFFF;
   background-color: #00A4BD;
-}
-.imgbutton {
-  //display: block;
-  //margin-left: auto;
 }
 </style>
 <base target="_parent"></base>
 </head>
 
 <body>
-<div class="dropdown" style="width: 100%; position: fixed; width: 130px; top: 0; right: 0;">
-  <img src="menu-right.png"/>
+<div class="dropdown" style="width: 100%; position: fixed; width: 120px; top: 0; right: 0;">
+  <img src="menu.png" align="right"/>
   <div class="dropdown-content">
+  <img src="menu.png" align="right"/>
+  <p style="height:4px" ></p>
   <a href="movies-vrac.htm">Vrac</a>
   <a href="movies-year.htm">Tri par année</a>
   <a href="movies-alpha.htm">Tri alphabétique</a>

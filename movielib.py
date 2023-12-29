@@ -115,6 +115,10 @@ def get_duration(filename):
         return 'undefined'
 
 
+def installname(fn):
+    return os.path.join(os.path.dirname(__file__), fn)
+
+
 # -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
 
 
@@ -218,11 +222,16 @@ def get_title(name, movie):
 
 def wikipedia_url(title, year):
     title = title.replace(' ', '_')
-    url1 = f'https://en.wikipedia.org/wiki/{title}_({year}_film)'
-    url2 = f'https://en.wikipedia.org/wiki/{title}_(film)'
-    url3 = f'https://en.wikipedia.org/wiki/{title}'
+    urls = (
+        f'https://en.wikipedia.org/wiki/{title}_({year}_film)',
+        f'https://en.wikipedia.org/wiki/{title}_(film)',
+        f'https://en.wikipedia.org/wiki/{title}',
+        f'https://fr.wikipedia.org/wiki/{title}_({year}_film)',
+        f'https://fr.wikipedia.org/wiki/{title}_(film)',
+        f'https://fr.wikipedia.org/wiki/{title}',
+    )
 
-    for url in (url1, url2, url3):
+    for url in urls:
         try:
             r = requests.get(url, timeout=10)
         except requests.exceptions.ConnectionError:
@@ -503,16 +512,16 @@ def update_movie_record(rep, record, forcethumb=False):
             print('Warning: no image for', movie_name)
 
 
-MENU = '<iframe src="%s" height=220px style="position: fixed; top: 20px; right: 40px; border-style: none!important;"></iframe>'
+MENU = '<iframe src="%s" width=130px height=240px style="position: fixed; top: 20px; right: 30px; border-style: none!important;"></iframe>'
 
 
 def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records, tags, caption):
     for record in records:
         update_movie_record(rep, record, forcethumb=forcethumb)
 
-    file_loader = FileSystemLoader('')
+    file_loader = FileSystemLoader(os.path.dirname(__file__))
     env = Environment(loader=file_loader)
-    template = env.get_template('template-gallery.htm')
+    template = env.get_template(TEMPLATE_GALLERY)
 
     html = template.render(
         records=records,
@@ -624,9 +633,9 @@ def make_stats_page(rep, records):
 
     data.append(('Total', '', '', '', space_thousands(total)))
 
-    file_loader = FileSystemLoader('')
+    file_loader = FileSystemLoader(os.path.dirname(__file__))
     env = Environment(loader=file_loader)
-    template = env.get_template('template-stats.htm')
+    template = env.get_template(TEMPLATE_STATS)
 
     html = template.render(
         data=data,
@@ -751,9 +760,9 @@ def make_movie_pages(rep, records):
     for actor, movies in actor_movies.items():
         actor_movies[actor] = sorted(movies)
 
-    file_loader = FileSystemLoader('')
+    file_loader = FileSystemLoader(os.path.dirname(__file__))
     env = Environment(loader=file_loader)
-    template = env.get_template('template-movie.htm')
+    template = env.get_template(TEMPLATE_MOVIE)
 
     for record in records:
         html = movie_record_html(rep, records, record, yearmovie_num, director_movies, actor_movies, template)
@@ -763,8 +772,10 @@ def make_movie_pages(rep, records):
             print(html, file=f)
 
 
-def make_html_pages(rep, forcethumb):
+def make_html_pages(rep, language, forcethumb):
     os.makedirs(os.path.join(rep, '.gallery', '.thumbnails'), exist_ok=True)
+    shutil.copy(installname(f'menu-{language}.htm'), installname(MENUFILE))
+    shutil.copy(installname(f'template-movie-{language}.htm'), installname(TEMPLATE_MOVIE))
     records = load_records(rep)
     load_main_cast(records)
     make_vrac_page(rep, records, forcethumb=forcethumb)
@@ -774,10 +785,11 @@ def make_html_pages(rep, forcethumb):
     make_actor_page(rep, records, forcethumb=False)
     make_stats_page(rep, records)
     make_movie_pages(rep, records)
-    shutil.copy(os.path.join(os.path.dirname(__file__), 'movies.htm'), rep)
-    shutil.copy(os.path.join(os.path.dirname(__file__), MENUFILE), os.path.join(rep, '.gallery'))
-    shutil.copy(os.path.join(os.path.dirname(__file__), 'movies-icon.png'), os.path.join(rep, '.gallery'))
-    shutil.copy(os.path.join(os.path.dirname(__file__), 'top-icon.png'), os.path.join(rep, '.gallery'))
+    shutil.copy(installname('movies.htm'), rep)
+    for fn in (MENUFILE, 'menu.png', 'movies-icon.png', 'top-icon.png'):
+        shutil.copy(installname(fn), os.path.join(rep, '.gallery'))
+    os.remove(installname(MENUFILE))
+    os.remove(installname(TEMPLATE_MOVIE))
 
 
 # -- Test functions -----------------------------------------------------------
@@ -856,8 +868,8 @@ def test(funcname, rep):
 
 def lang_choices():
     choices = []
-    for x in glob.glob('menu-*.htm'):
-        match = re.match(r'menu-(\w+)\.htm', x)
+    for x in glob.glob(installname('menu-*.htm')):
+        match = re.search(r'menu-(\w+)\.htm', x)
         choices.append(match[1])
     return choices
 
@@ -881,8 +893,6 @@ def parse_command_line():
     if args.update:
         args.rep = args.update
 
-    shutil.copy(f'menu-{args.language}.htm', MENUFILE)
-    shutil.copy(f'template-movie-{args.language}.htm', TEMPLATE_MOVIE)
     return parser, args
 
 
@@ -893,10 +903,10 @@ def main():
     elif args.extract_data:
         create_missing_records(args.rep, args.force_json)
     elif args.make_pages:
-        make_html_pages(args.rep, args.force_thumb)
+        make_html_pages(args.rep, args.language, args.force_thumb)
     elif args.update:
         create_missing_records(args.rep, args.force_json)
-        make_html_pages(args.rep, args.force_thumb)
+        make_html_pages(args.rep, args.language, args.force_thumb)
     elif args.test:
         test(*args.test)
     else:
