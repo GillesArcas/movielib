@@ -119,6 +119,10 @@ def installname(fn):
     return os.path.join(os.path.dirname(__file__), fn)
 
 
+def space_thousands(n):
+    return f'{n:,}'.replace(',', ' ')
+
+
 # -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
 
 
@@ -614,10 +618,6 @@ def make_actor_page(rep, records, forcethumb):
     make_gallery_page(MOVIES_ACTOR, rep, records, forcethumb, index, movies_by_actor, tags, True)
 
 
-def space_thousands(n):
-    return f'{n:,}'.replace(',', ' ')
-
-
 def make_stats_page(rep, records):
     data = []
     total = 0
@@ -644,6 +644,20 @@ def make_stats_page(rep, records):
     )
     with open(os.path.join(rep, '.gallery', MOVIES_STATS), 'wt', encoding='utf-8') as f:
         print(html, file=f)
+
+
+def purge_thumbnails(rep, records):
+    """
+    Purge thumbnail directory from irrelevant thumbnails
+    """
+    thumblist = []
+    for record in records:
+        thumblist.append(thumbname(record['cover'], 'film'))
+
+    for fullname in glob.glob(os.path.join(rep, '.gallery', '.thumbnails', '*.jpg')):
+        if os.path.basename(fullname) not in thumblist:
+            print('Removing thumbnail', fullname)
+            os.remove(fullname)
 
 
 # -- Pass 4: make movie html files --------------------------------------------
@@ -783,6 +797,7 @@ def make_html_pages(rep, language, forcethumb):
     make_alpha_page(rep, records, forcethumb=False)
     make_director_page(rep, records, forcethumb=False)
     make_actor_page(rep, records, forcethumb=False)
+    purge_thumbnails(rep, records)
     make_stats_page(rep, records)
     make_movie_pages(rep, records)
     shutil.copy(installname('movies.htm'), rep)
