@@ -37,24 +37,37 @@ img.cover {
   width=auto;
   height=auto;
 }
+div.anchor {
+  visibility: hidden;
+  padding-top: 45px;
+  margin-top: -45px;
+}
 </style>
 </head>
 
 <body>
-{{menu}}
-
 <div style="width: 95%; margin-left: auto; margin-right: auto">
+
 {% if index %}
-    <h2>
-    {% for x in index %}
-        <a style="display:inline-table;" href="#{{x}}">{{x}}</a>
-    {% endfor %}
-    </h2>
+    <div style="width: 94%; height:60px; top: 0; background-color: white; position: fixed; ">
+        {% include 'menu.htm' %}
+        <h2>
+        {% for x in index %}
+            <a style="display:inline-table;" href="#{{x}}">{{x}}</a>
+        {% endfor %}
+        </h2>
+    </div>
+    <br>
+    <br>
+{% else %}
+    <div style="width: 94%; height:0px; top: 0; position: fixed; ">
+        {% include 'menu.htm' %}
+    </div>
 {% endif %}
 
 {% for key, records in sorted_records.items()|sort(attribute='0') %}
     {% if tags[key] %}
-        <div id="{{tags[key]}}" style="visibility: hidden;"></div>
+        <div id="{{tags[key]}}" class="anchor"></div>
     {% endif %}
     {% if key %}
         <h2>{{key}} <img src="top-icon.png" style="float: right;" onclick="window.location.href='#top'" /></h2>

@@ -15,5 +15,6 @@ setup(
         'pillow',
         'requests',
         'cinemagoer',
+        'jinja2'
     ]
 )

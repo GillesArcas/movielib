@@ -516,9 +516,6 @@ def update_movie_record(rep, record, forcethumb=False):
             print('Warning: no image for', movie_name)
 
 
-MENU = '<iframe src="%s" width=130px height=240px style="position: fixed; top: 20px; right: 30px; border-style: none!important;"></iframe>'
-
-
 def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records, tags, caption):
     for record in records:
         update_movie_record(rep, record, forcethumb=forcethumb)
@@ -533,7 +530,7 @@ def make_gallery_page(pagename, rep, records, forcethumb, index, sorted_records,
         sorted_records=sorted_records,
         tags=tags,
         caption=caption,
-        menu=MENU % MENUFILE,
+        path_to_gallery='',
         icon='movies-icon.png'
     )
     with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
@@ -587,7 +584,8 @@ def make_director_page(rep, records, forcethumb):
 
     first_director = {}
     tags = {}
-    for director in sorted(movies_by_director):
+    for director, movies in sorted(movies_by_director.items()):
+        movies_by_director[director] = sorted(movies, key=lambda rec: rec['year_title'])
         if first_director.get(director[0], None) is None:
             first_director[director[0]] = director
             tags[director] = director[0]
@@ -639,7 +637,7 @@ def make_stats_page(rep, records):
 
     html = template.render(
         data=data,
-        menu=MENU % MENUFILE,
+        path_to_gallery='',
         icon='movies-icon.png'
     )
     with open(os.path.join(rep, '.gallery', MOVIES_STATS), 'wt', encoding='utf-8') as f:
@@ -743,13 +741,13 @@ def movie_record_html(rep, records, record, yearmovie_num, director_movies, acto
 
     html = template.render(
         title=record['title'],
-        menu=MENU % relpath_to_menu(record),
         movie_link=record['filename'],
         imdb_link=imdb_link(record),
         wikipedia_link=wikipedia_link(record),
         google_link=google_link(record),
         record=record,
         icon=record['cover'],  # relpath_to_icon(record),
+        path_to_gallery=record['relpath_to_root'] + '.gallery/',
         zip=zip,
         space_thousands=space_thousands,
     )
