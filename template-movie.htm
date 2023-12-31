@@ -41,29 +41,29 @@ a.disabled {
 <br>
 <br>
 <br>
-<a href="{{movie_link}}">Play</a>
+<a href="{{movie_link}}">{{T('Play')}}</a>
 <br>
-<a {{imdb_link}}>Show on IMDB</a>
+<a {{imdb_link}}>{{T('Show on IMDB')}}</a>
 <br>
-<a {{wikipedia_link}}>Show on Wikipedia</a>
+<a {{wikipedia_link}}>{{T('Show on Wikipedia')}}</a>
 <br>
-<a {{google_link}}>Search on Google</a>
+<a {{google_link}}>{{T('Search on Google')}}</a>
 
 </div>
 
 <div class="float-child" style="width: 33%;">
 
-<h3>Title</h3>
+<h3>{{T('Title')}}</h3>
 <ul>
     <li>{{record.title}}</li>
 </ul>
 
-<h3>Year</h3>
+<h3>{{T('Year')}}</h3>
 <ul>
     <li>{{record.year}}</li>
 </ul>
 
-<h3>Director</h3>
+<h3>{{T('Director')}}</h3>
 <ul>
 {% if not record.director_list %}
     <li>Not specified</li>
@@ -78,7 +78,7 @@ a.disabled {
 {% endif %}
 </ul>
 
-<h3>Cast</h3>
+<h3>{{T('Cast')}}</h3>
 <ul>
 {% if not record.actor_list %}
     <li>Not specified</li>
@@ -93,17 +93,17 @@ a.disabled {
 {% endif %}
 </ul>
 
-<h3>Runtime</h3>
+<h3>{{T('Runtime')}}</h3>
 <ul>
     <li>{{record.runtime}} minutes</li>
 </ul>
 
-<h3>Dimension</h3>
+<h3>{{T('Dimension')}}</h3>
 <ul>
     <li>{{record.width}} x {{record.height}}</li>
 </ul>
 
-<h3>File size</h3>
+<h3>{{T('File size')}}</h3>
 <ul>
     <li>{{record.filesize|filesizeformat}} ({{space_thousands(record.filesize)}} octets)</li>
 </ul>
@@ -112,7 +112,7 @@ a.disabled {
 <div class="float-child" style="width: 33%;">
 {% for director, movies, paths in zip(record.director_list, record.dirothermovies, record.path_to_dirothermovies) %}
     {% if director %}
-        <h3>Other movies of {{director}} in collection</h3>
+        <h3>{{T('Other movies of')}} {{director}} {{T('in collection')}}</h3>
         <ul>
         {% if not movies %}
             <li>None</li>
@@ -127,7 +127,7 @@ a.disabled {
 
 {% for actor, movies, paths in zip(record.cast[:5], record.castothermovies, record.path_to_castothermovies) %}
     {% if movies %}
-        <h3>Other movies of {{actor}} in collection</h3>
+        <h3>{{T('Other movies of')}} {{actor}} {{T('in collection')}}</h3>
         <ul>
             {% for movie, path in zip(movies, paths) %}
                 <li><a href="{{path}}">{{movie}}</a></li>
