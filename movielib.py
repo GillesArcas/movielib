@@ -808,7 +808,7 @@ def make_html_pages(rep, language, forcethumb):
     make_stats_page(rep, records, translate)
     make_movie_pages(rep, records, translate)
     purge_thumbnails(rep, records)
-    shutil.copy(installname('movies.htm'), rep)
+    shutil.copy(installname('index.htm'), rep)
     for fn in (MENUFILE, 'menu.png', 'movies-icon.png', 'top-icon.png'):
         shutil.copy(installname(fn), os.path.join(rep, '.gallery'))
 
