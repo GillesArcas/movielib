@@ -1,8 +1,6 @@
 """
-> movielib --import_imdb_data
-> movielib --extract_data <movies rep>
-> movielib --make_pages <movies rep>
 > movielib --update <movies rep>
+> movielib --import_imdb_data
 """
 
 
@@ -130,7 +128,7 @@ def space_thousands(n):
 def lang_choices():
     choices = ['EN']
     with open(TRANSLATIONS, encoding='utf-8') as f:
-        choices.extend(re.findall(r'\b([A-Z]+)\n', f.read()))
+        choices.extend(re.findall(r'^([A-Z]+)\n', f.read(), flags=re.MULTILINE))
     return choices
 
 
@@ -893,8 +891,8 @@ def parse_command_line():
     parser = argparse.ArgumentParser(add_help=True, usage=__doc__)
     xgroup = parser.add_mutually_exclusive_group()
     xgroup.add_argument('--import_imdb_data', action='store_true', default=False)
-    xgroup.add_argument('--extract_data', action='store', metavar='<movies rep>')
-    xgroup.add_argument('--make_pages', action='store', metavar='<movies rep>')
+    xgroup.add_argument('--extract_data', action='store', metavar='<movies rep>', help=argparse.SUPPRESS)
+    xgroup.add_argument('--make_pages', action='store', metavar='<movies rep>', help=argparse.SUPPRESS)
     xgroup.add_argument('--update', action='store', metavar='<movies rep>')
     xgroup.add_argument('--test', action='store', nargs=2, help=argparse.SUPPRESS)
     parser.add_argument('--language', action='store', choices=lang_choices(), default='EN')
