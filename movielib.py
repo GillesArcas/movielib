@@ -96,6 +96,8 @@ def get_dimensions(filename):
     except CalledProcessError as e:
         output = e.output.decode()
         return None, None
+    except:
+        return None, None
 
 
 def get_duration(filename):
@@ -127,13 +129,13 @@ def space_thousands(n):
 
 def lang_choices():
     choices = ['EN']
-    with open(TRANSLATIONS, encoding='utf-8') as f:
+    with open(installname(TRANSLATIONS), encoding='utf-8') as f:
         choices.extend(re.findall(r'^([A-Z]+)\n', f.read(), flags=re.MULTILINE))
     return choices
 
 
 def lang_dict(language):
-    with open(TRANSLATIONS, encoding='utf-8') as f:
+    with open(installname(TRANSLATIONS), encoding='utf-8') as f:
         for line in f:
             if line.strip() == language:
                 break
