@@ -91,7 +91,8 @@ def get_dimensions(filename):
 
     try:
         output = check_output(command, stderr=STDOUT).decode()
-        width, height = [int(_) for _ in output.strip().split('x')]
+        match = re.match(r'(\d+)x(\d+)\b', output.strip())
+        width, height = [int(_) for _ in match.groups()]
         return width, height
     except CalledProcessError as e:
         output = e.output.decode()
