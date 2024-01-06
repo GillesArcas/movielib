@@ -125,7 +125,7 @@ a.disabled {
     {% endif %}
 {% endfor %}
 
-{% for actor, movies, paths in zip(record.cast[:5], record.castothermovies, record.path_to_castothermovies) %}
+{% for actor, movies, paths in zip(record.actor_list, record.castothermovies, record.path_to_castothermovies) %}
     {% if movies %}
         <h3>{{T('Other movies of')}} {{actor}} {{T('in collection')}}</h3>
         <ul>
