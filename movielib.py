@@ -735,14 +735,13 @@ def movie_record_html(rep, records, record, translate, yearmovie_num, director_m
     if not record['cast']:
         record['actor_list'] = []
     else:
-        maincast = record['main_cast']
-        record['actor_list'] = maincast
-        if len(record['cast']) > len(maincast):
-            record['actor_list'].append(', '.join([_ for _ in record['cast'] if _ not in maincast]))
+        record['actor_list'] = record['main_cast'][:]
+        if len(record['cast']) > len(record['main_cast']):
+            record['actor_list'].append(', '.join([_ for _ in record['cast'] if _ not in record['main_cast']]))
 
     if record['cast']:
         record['castothermovies'] = []
-        for actor in maincast:
+        for actor in record['actor_list']:
             record['castothermovies'].append([_ for _ in actor_movies[actor] if record['year_title'] != _])
             record['path_to_castothermovies'] = []
             for movies in record['castothermovies']:
