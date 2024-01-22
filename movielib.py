@@ -317,8 +317,8 @@ def create_record(dirpath, filename, name, ia, imdb_id):
     record['imdb_id'] = movie.movieID
     record['title'] = get_title(name, movie)
     record['year'] = movie.get('year')
-    record['runtime'] = movie.get('runtimes')[0]
-    record['director'] = [_.get('name') for _ in movie.get('director')]
+    record['runtime'] = movie.get('runtimes', ['0000'])[0]
+    record['director'] = [_.get('name') for _ in movie.get('director', [])]
     record['cast'] = [_.get('name') for _ in movie.get('cast')]
 
     # set wikipedia url
