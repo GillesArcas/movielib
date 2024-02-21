@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>History</title>
+<link rel="icon" href="{{icon}}" />
+<style type="text/css">
+body {
+  font: normal 14px Verdana, Arial, sans-serif;
+}
+td {
+  padding-left: 15px;
+  padding-right: 15px;
+  text-align: right;
+}
+</style>
+<script>
+function process()
+{
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get('mode') == 'store') {
+      var movie = unescape(params.get('movie'));
+      var dates = unescape(params.get('dates'));
+      localStorage.setItem(movie, dates);
+      window.close();
+    }
+  else {
+      process_show();
+  }
+}
+
+function process_show() {
+    //var s = JSON.stringify(localStorage);
+    //document.getElementById("content").innerHTML = s;
+    var s = '';
+    for (var i = 0; i < localStorage.length; i++) {
+        var movie = localStorage.key(i);
+        var dates = localStorage.getItem(movie).split("|");
+        s += `<h4>${movie}</h4>`;
+        for (var j = 0; j < dates.length; j++) {
+            s += `<p>${dates[j]}</p>`;
+        }
+    }
+    document.getElementById("content").innerHTML = s;
+}
+
+function process_load()
+{
+  previewFile();
+}
+
+function previewFile() {
+  const [file] = document.querySelector("input[type=file]").files;
+  const reader = new FileReader();
+
+  reader.addEventListener(
+    "load",
+    () => {
+      process_input(reader.result);
+    },
+    false,
+  );
+
+  if (file) {
+    reader.readAsText(file);
+  }
+}
+
+function process_input(s)
+{
+  var lines = s.split('\n');
+
+  r = '';
+  for (var i = 0; i < lines.length; i++){
+    if (lines[i].search(/\d\d\/\d\d\/\d\d\d\d/) < 0) {
+      r += `<h4>${lines[i]}</h4>`; }
+    else {
+      r += `<p>${lines[i]}</p>`; }
+  }
+  document.getElementById("content").innerHTML = r;
+
+  var dates = {};
+  for (var i = 0; i < lines.length; i++){
+    if (lines[i].search(/\d\d\/\d\d\/\d\d\d\d/) < 0) {
+      movie = lines[i];
+      dates[movie] = '';
+    }
+    else {
+      dates[movie] = (dates[movie] == '') ? lines[i] : dates[movie] + '|' + lines[i];
+    }
+  }
+  delete dates[''];
+  for (var movie in dates) {
+    localStorage.setItem(movie, dates[movie]);
+    window.open(`${movie}?dates=${dates[movie]}`);
+    console.log(movie, dates[movie], `${movie}?dates=${dates[movie]}`);
+  }
+}
+</script>
+</head>
+
+<body onload="process();">
+<div style="width: 95%; margin-left: auto; margin-right: auto">
+    <div style="width: 94%; height:0px; top: 0; position: fixed; ">
+        {% include 'menu.htm' %}
+    </div>
+
+<input type="file" id="load_input" onchange="previewFile()" style="display:none;"/>
+<input type="button"
+       onclick="document.getElementById('load_input').click()"
+       value="Restore history" />
+
+<input type="file" id="save_input" onchange="" style="display:none;"/>
+<input type="button"
+       onclick="document.getElementById('save_input').click()"
+       value="Save history" />
+
+<div id="content">
+</div>
+</div>
+</body>
+</html>

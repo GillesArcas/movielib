@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 
 <head>
@@ -28,9 +29,50 @@ a.disabled {
   color: lightgrey;
 }
 </style>
+<script>
+function onload() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dates')) {
+        localStorage.setItem('dates', params.get('dates'));
+        window.close();
+    }
+    if (localStorage.getItem('dates')) {
+        var dates = localStorage.getItem('dates').split('|');
+        var s = '';
+        for (const date of dates) {
+            s += '<li>' + date + '</li>';
+        }
+        document.getElementById("history").innerHTML = s;
+    }
+}
+
+function add_date() {
+    var movie = '{{record['movie_page']}}';
+    var today = new Date();
+    var options = {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    };
+    var fdate = today.toLocaleDateString("fr-FR", options);
+    var prevdates = localStorage.getItem('dates');
+    var dates = (prevdates == null) ? fdate : prevdates + '|' + fdate;
+
+    localStorage.setItem('dates', dates);
+    var s = '';
+    for (const date of dates) {
+        s += '<li>' + date + '</li>';
+    }
+    document.getElementById("history").innerHTML = '<ul>' + s + '</ul>';
+
+    window.open(`../.gallery/movies-history.htm?mode=store&movie=${movie}&dates=${dates}`);
+    location.reload();
+}
+</script>
 </head>
 
-<body>
+<body onload="onload();">
+
 <div style="width: 95%; margin-left: auto; margin-right: auto">
     <div style="width: 94%; height:0px; top: 0; position: fixed; ">
         {% include 'menu.htm' %}
@@ -48,7 +90,14 @@ a.disabled {
 <a {{wikipedia_link}}>{{T('Show on Wikipedia')}}</a>
 <br>
 <a {{google_link}}>{{T('Search on Google')}}</a>
-
+<br>
+<br>
+<p>History:</p>
+<ul>
+<div id="history">
+</div>
+<li><a href='javascript:add_date();'>+ seen today</a></li>
+</ul>
 </div>
 
 <div class="float-child" style="width: 33%;">

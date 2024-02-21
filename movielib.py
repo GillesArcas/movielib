@@ -31,6 +31,7 @@ TITLES_INDEX = 'titlestsv.pickle'
 MENUFILE = 'menu.htm'
 TEMPLATE_GALLERY = 'template-gallery.htm'
 TEMPLATE_STATS = 'template-stats.htm'
+TEMPLATE_HISTORY = 'template-history.htm'
 TEMPLATE_MOVIE = 'template-movie.htm'
 MOVIES_VRAC = 'movies-vrac.htm'
 MOVIES_YEAR = 'movies-year.htm'
@@ -38,6 +39,7 @@ MOVIES_ALPHA = 'movies-alpha.htm'
 MOVIES_DIRECTOR = 'movies-director.htm'
 MOVIES_ACTOR = 'movies-actor.htm'
 MOVIES_STATS = 'movies-stats.htm'
+MOVIES_HISTORY = 'movies-history.htm'
 TRANSLATIONS = 'translations.txt'
 
 
@@ -654,6 +656,20 @@ def make_stats_page(rep, records, translate):
         print(html, file=f)
 
 
+def make_history_page(rep, translate):
+    file_loader = FileSystemLoader(os.path.dirname(__file__))
+    env = Environment(loader=file_loader)
+    template = env.get_template(TEMPLATE_HISTORY)
+
+    html = template.render(
+        path_to_gallery='',
+        icon='movies-icon.png',
+        T=translate
+    )
+    with open(os.path.join(rep, '.gallery', MOVIES_HISTORY), 'wt', encoding='utf-8') as f:
+        print(html, file=f)
+
+
 def purge_thumbnails(rep, records):
     """
     Purge thumbnail directory from irrelevant thumbnails
@@ -808,6 +824,7 @@ def make_html_pages(rep, language, forcethumb):
     make_alpha_page(rep, records, translate, forcethumb=False)
     make_actor_page(rep, records, translate, forcethumb=False)
     make_stats_page(rep, records, translate)
+    make_history_page(rep, translate);
     make_movie_pages(rep, records, translate)
     purge_thumbnails(rep, records)
     shutil.copy(installname('index.htm'), rep)

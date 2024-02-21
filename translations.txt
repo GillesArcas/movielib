@@ -18,3 +18,4 @@ Dimension            Résolution
 File size            Taille du fichier
 Other movies of      Autres films de
 in collection        dans la collection
+History              Historique
