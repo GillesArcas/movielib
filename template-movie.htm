@@ -33,11 +33,14 @@ a.disabled {
 function onload() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('dates')) {
-        localStorage.setItem('dates', params.get('dates'));
+        if (params.get('dates') == 'remove')
+            localStorage.removeItem('dates');
+        else
+            localStorage.setItem('dates', params.get('dates'));
         window.close();
     }
     if (localStorage.getItem('dates')) {
-        var dates = localStorage.getItem('dates').split('|');
+        var dates = localStorage.getItem('dates').split(',');
         var s = '';
         for (const date of dates) {
             s += '<li>' + date + '</li>';
@@ -56,15 +59,9 @@ function add_date() {
     };
     var fdate = today.toLocaleDateString("fr-FR", options);
     var prevdates = localStorage.getItem('dates');
-    var dates = (prevdates == null) ? fdate : prevdates + '|' + fdate;
+    var dates = (prevdates == null) ? fdate : (prevdates + ',' + fdate);
 
     localStorage.setItem('dates', dates);
-    var s = '';
-    for (const date of dates) {
-        s += '<li>' + date + '</li>';
-    }
-    document.getElementById("history").innerHTML = '<ul>' + s + '</ul>';
-
     window.open(`../.gallery/movies-history.htm?mode=store&movie=${movie}&dates=${dates}`);
     location.reload();
 }
@@ -92,11 +89,12 @@ function add_date() {
 <a {{google_link}}>{{T('Search on Google')}}</a>
 <br>
 <br>
-<p>History:</p>
-<ul>
+
+<p style='margin-bottom:0;' >{{T('History')}}:</p>
+<ul style='margin-top:2px;'>
 <div id="history">
 </div>
-<li><a href='javascript:add_date();'>+ seen today</a></li>
+<li><a href='javascript:add_date();' title="{{T('Add as viewed today')}}">...</a></li>
 </ul>
 </div>
 

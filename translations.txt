@@ -1,21 +1,22 @@
 FR
-Storage order        Vrac
-Sort by year         Tri par année
-Alphabetical order   Tri alphabétique
-Sort by director     Tri par metteur en scène
-Sort by actor        Tri par acteur
-Statistics           Statistiques
-Play                 Visionner
-Show on IMDB         Voir sur IMDB
-Show on Wikipedia    Voir sur Wikipedia
-Search on Google     Chercher sur Google
-Title                Titre
-Year                 Année
-Director             Mise en scène
-Cast                 Acteurs
-Runtime              Durée
-Dimension            Résolution
-File size            Taille du fichier
-Other movies of      Autres films de
-in collection        dans la collection
-History              Historique
+Storage order           Vrac
+Sort by year            Tri par année
+Alphabetical order      Tri alphabétique
+Sort by director        Tri par metteur en scène
+Sort by actor           Tri par acteur
+Statistics              Statistiques
+Play                    Visionner
+Show on IMDB            Voir sur IMDB
+Show on Wikipedia       Voir sur Wikipedia
+Search on Google        Chercher sur Google
+Title                   Titre
+Year                    Année
+Director                Mise en scène
+Cast                    Acteurs
+Runtime                 Durée
+Dimension               Résolution
+File size               Taille du fichier
+Other movies of         Autres films de
+in collection           dans la collection
+History                 Historique
+Add as viewed today     Ajouter comme vu aujourd'hui

@@ -13,111 +13,145 @@ td {
   padding-right: 15px;
   text-align: right;
 }
+td.dates {
+  padding-left: 15px;
+  padding-right: 15px;
+  text-align: left;
+}
 </style>
 <script>
-function process()
-{
-  const params = new URLSearchParams(window.location.search);
+function onload() {
+    const params = new URLSearchParams(window.location.search);
 
-  if (params.get('mode') == 'store') {
-      var movie = unescape(params.get('movie'));
-      var dates = unescape(params.get('dates'));
-      localStorage.setItem(movie, dates);
-      window.close();
+    if (params.get('mode') == 'store') {
+        var movie = unescape(params.get('movie'));
+        var dates = unescape(params.get('dates'));
+        localStorage.setItem(movie, dates);
+        window.close();
+    } else {
+        show_history();
     }
-  else {
-      process_show();
-  }
 }
 
-function process_show() {
-    //var s = JSON.stringify(localStorage);
-    //document.getElementById("content").innerHTML = s;
+function sort_by_movie() {
+    localStorage.setItem('show_by', 'movie');
+    show_history();
+}
+
+function sort_by_date() {
+    localStorage.setItem('show_by', 'date');
+    show_history();
+}
+
+function show_history() {
+    if (localStorage.getItem('show_by') == 'movie')
+        show_history_by_movie();
+    else
+        show_history_by_date();
+}
+
+function show_history_by_movie() {
     var s = '';
-    for (var i = 0; i < localStorage.length; i++) {
-        var movie = localStorage.key(i);
-        var dates = localStorage.getItem(movie).split("|");
-        s += `<h4>${movie}</h4>`;
-        for (var j = 0; j < dates.length; j++) {
-            s += `<p>${dates[j]}</p>`;
-        }
+    for (const movie of Object.keys(localStorage).sort()) {
+        var dates = localStorage.getItem(movie);
+        s += '<tr>' + '<td>' + movie + '</td>' + '<td class="dates">' + dates + '</td>' + '</tr>';
     }
     document.getElementById("content").innerHTML = s;
 }
 
-function process_load()
-{
-  previewFile();
+function show_history_by_date() {
+    var movies = {};
+    for (const movie of Object.keys(localStorage).sort()) {
+        var dates = localStorage.getItem(movie).split(",");
+        for (const date of dates) {
+            movies[date] = movie;   // assume at most one movie per day
+        }
+    }
+    delete movies[''];
+    var s = '';
+    for (var date of Object.keys(movies).sort()) {
+        s += '<tr>' + '<td>' + date + '</td>' + '<td class="dates">' + movies[date] + '</td>' + '</tr>';
+    }
+    document.getElementById("content").innerHTML = s;
 }
 
-function previewFile() {
-  const [file] = document.querySelector("input[type=file]").files;
-  const reader = new FileReader();
+function onClickRestore() {
+    const [file] = document.querySelector("input[type=file]").files;
+    const reader = new FileReader();
 
-  reader.addEventListener(
-    "load",
-    () => {
-      process_input(reader.result);
-    },
-    false,
-  );
+    reader.addEventListener(
+        "load",
+        () => {
+            restore_history(reader.result);
+        },
+        false,
+    );
 
-  if (file) {
-    reader.readAsText(file);
-  }
+    if (file) {
+        reader.readAsText(file);
+    }
 }
 
-function process_input(s)
-{
-  var lines = s.split('\n');
-
-  r = '';
-  for (var i = 0; i < lines.length; i++){
-    if (lines[i].search(/\d\d\/\d\d\/\d\d\d\d/) < 0) {
-      r += `<h4>${lines[i]}</h4>`; }
-    else {
-      r += `<p>${lines[i]}</p>`; }
-  }
-  document.getElementById("content").innerHTML = r;
-
-  var dates = {};
-  for (var i = 0; i < lines.length; i++){
-    if (lines[i].search(/\d\d\/\d\d\/\d\d\d\d/) < 0) {
-      movie = lines[i];
-      dates[movie] = '';
+function restore_history(s) {
+    var lines = s.split('\r\n');
+    var dates = {};
+    for (const line of lines) {
+        if (line.search(/\d\d\/\d\d\/\d\d\d\d/) < 0) {
+            movie = line.trim();
+        } else {
+            dates[movie] = line;
+        }
     }
-    else {
-      dates[movie] = (dates[movie] == '') ? lines[i] : dates[movie] + '|' + lines[i];
+    for (var movie in dates) {
+        localStorage.setItem(movie, dates[movie]);
+        window.open(`${movie}?dates=${dates[movie]}`);
     }
-  }
-  delete dates[''];
-  for (var movie in dates) {
-    localStorage.setItem(movie, dates[movie]);
-    window.open(`${movie}?dates=${dates[movie]}`);
-    console.log(movie, dates[movie], `${movie}?dates=${dates[movie]}`);
-  }
+    for (const movie of Object.keys(localStorage))
+        if (! (movie in dates)) {
+            localStorage.removeItem(movie);
+            window.open(`${movie}?dates=remove`);
+        }
+    location.reload();
+}
+
+async function save_history() {
+    var s = '';
+    for (const movie of Object.keys(localStorage)) {
+        if (!movie) continue;
+        var dates = localStorage.getItem(movie).split(",");
+        s += movie + '\n';
+        for (const date of dates) {
+            s += date + '\n';
+        }
+    }
+    try {
+        await navigator.clipboard.writeText(s);
+        alert('Content copied to clipboard');
+    } catch (err) {
+        alert('Failed to copy: ', err);
+    }
 }
 </script>
 </head>
 
-<body onload="process();">
+<body onload="onload();">
 <div style="width: 95%; margin-left: auto; margin-right: auto">
-    <div style="width: 94%; height:0px; top: 0; position: fixed; ">
-        {% include 'menu.htm' %}
-    </div>
 
-<input type="file" id="load_input" onchange="previewFile()" style="display:none;"/>
+<div style="width: 94%; height:0px; top: 0; position: fixed; ">
+    {% include 'menu.htm' %}
+</div>
+
+<input type="file" id="load_input" onchange="onClickRestore()" style="display:none;"/>
 <input type="button"
        onclick="document.getElementById('load_input').click()"
        value="Restore history" />
 
-<input type="file" id="save_input" onchange="" style="display:none;"/>
-<input type="button"
-       onclick="document.getElementById('save_input').click()"
-       value="Save history" />
+<input type="button" onclick="save_history();" value="Save history" />
+<input type="button" onclick="sort_by_movie();" value="Sort by movie" />
+<input type="button" onclick="sort_by_date();" value="Sort by date" />
 
-<div id="content">
-</div>
+<table id="content">
+</table>
 </div>
 </body>
 </html>
