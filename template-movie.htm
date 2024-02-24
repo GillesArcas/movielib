@@ -52,7 +52,7 @@ function date_iso_to_loc(dateiso) {
 }
 
 function onload() {
-    let dates = getcookie("{{record['movie_page']}}");
+    let dates = getcookie("{{record['title']}}");
     if (dates !== null) {
         let s = '';
         for (const dateiso of dates.split(',')) {
@@ -63,7 +63,7 @@ function onload() {
 }
 
 function add_date() {
-    let movie = '{{record['movie_page']}}';
+    let movie = '{{record['title']}}';
     let today = new Date().toISOString().split('T')[0];
     let prevdates = getcookie(movie);
     let dates = (prevdates === null) ? today : (prevdates + ',' + today);
