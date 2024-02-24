@@ -30,20 +30,33 @@ a.disabled {
 }
 </style>
 <script>
-function onload() {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('dates')) {
-        if (params.get('dates') == 'remove')
-            localStorage.removeItem('dates');
-        else
-            localStorage.setItem('dates', params.get('dates'));
-        window.close();
+function setcookie(movie, dates) {
+    document.cookie = `movielib-${movie}=${dates};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
+}
+
+function getcookie(movie) {
+    for (const pair of document.cookie.split("; ")) {
+        if (pair.startsWith('movielib-' + movie))
+            return pair.split("=")[1];
     }
-    if (localStorage.getItem('dates')) {
-        var dates = localStorage.getItem('dates').split(',');
+    return null;
+}
+
+function date_iso_to_loc(dateiso) {
+    var options = {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    };
+    return new Date(dateiso).toLocaleDateString("fr-FR", options);
+}
+
+function onload() {
+    dates = getcookie("{{record['movie_page']}}");
+    if (dates !== null) {
         var s = '';
-        for (const date of dates) {
-            s += '<li>' + date + '</li>';
+        for (const dateiso of dates.split(',')) {
+            s += '<li>' + date_iso_to_loc(dateiso) + '</li>';
         }
         document.getElementById("history").innerHTML = s;
     }
@@ -51,19 +64,12 @@ function onload() {
 
 function add_date() {
     var movie = '{{record['movie_page']}}';
-    var today = new Date();
-    var options = {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    };
-    var fdate = today.toLocaleDateString("fr-FR", options);
-    var prevdates = localStorage.getItem('dates');
-    var dates = (prevdates == null) ? fdate : (prevdates + ',' + fdate);
+    var today = new Date().toISOString().split('T')[0];
+    var prevdates = getcookie(movie);
+    var dates = (prevdates === null) ? today : (prevdates + ',' + today);
 
-    localStorage.setItem('dates', dates);
-    window.open(`../.gallery/movies-history.htm?mode=store&movie=${movie}&dates=${dates}`);
-    location.reload();
+    setcookie(movie, dates);
+    onload();
 }
 </script>
 </head>
