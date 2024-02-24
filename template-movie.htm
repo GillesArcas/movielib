@@ -43,7 +43,7 @@ function getcookie(movie) {
 }
 
 function date_iso_to_loc(dateiso) {
-    var options = {
+    const options = {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
@@ -52,9 +52,9 @@ function date_iso_to_loc(dateiso) {
 }
 
 function onload() {
-    dates = getcookie("{{record['movie_page']}}");
+    let dates = getcookie("{{record['movie_page']}}");
     if (dates !== null) {
-        var s = '';
+        let s = '';
         for (const dateiso of dates.split(',')) {
             s += '<li>' + date_iso_to_loc(dateiso) + '</li>';
         }
@@ -63,10 +63,10 @@ function onload() {
 }
 
 function add_date() {
-    var movie = '{{record['movie_page']}}';
-    var today = new Date().toISOString().split('T')[0];
-    var prevdates = getcookie(movie);
-    var dates = (prevdates === null) ? today : (prevdates + ',' + today);
+    let movie = '{{record['movie_page']}}';
+    let today = new Date().toISOString().split('T')[0];
+    let prevdates = getcookie(movie);
+    let dates = (prevdates === null) ? today : (prevdates + ',' + today);
 
     setcookie(movie, dates);
     onload();

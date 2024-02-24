@@ -21,20 +21,16 @@ td.dates {
 </style>
 <script>
 function cookiedict() {
-    prefix = 'movielib-';
-    dict = {};
-    var cookies = document.cookie.split("; ");
+    const prefix = 'movielib-';
+    let movies_to_dates = {};
+    let cookies = document.cookie.split("; ");
     for (const pair of cookies) {
-        var cookie = pair.split("=");
-        var key = cookie[0].trim();
+        let cookie = pair.split("=");
+        let key = cookie[0].trim();
         if (key.startsWith(prefix))
-            dict[key.substring(prefix.length)] = cookie[1];
+            movies_to_dates[key.substring(prefix.length)] = cookie[1];
     }
-    return dict;
-}
-
-function movie_history() {
-    return cookiedict();
+    return movies_to_dates;
 }
 
 function setcookie(movie, dates) {
@@ -46,7 +42,7 @@ function remcookie(movie) {
 }
 
 function date_iso_to_loc(dateiso) {
-    var options = {
+    const options = {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
@@ -76,10 +72,10 @@ function show_history() {
 }
 
 function show_history_by_movie() {
-    var s = '';
-    moviehistory = cookiedict();
-    for (const movie of Object.keys(moviehistory).sort()) {
-        var datesloc = moviehistory[movie].split(',').map(dateiso => date_iso_to_loc(dateiso));
+    let s = '';
+    let movies_to_dates = cookiedict();
+    for (const movie of Object.keys(movies_to_dates).sort()) {
+        let datesloc = movies_to_dates[movie].split(',').map(dateiso => date_iso_to_loc(dateiso));
         s += '<tr>' +
              '<td>' + movie + '</td>' +
              '<td class="dates">' + datesloc.join(',') + '</td>' +
@@ -89,19 +85,19 @@ function show_history_by_movie() {
 }
 
 function show_history_by_date() {
-    var movies = {};
-    moviehistory = cookiedict();
-    for (const movie of Object.keys(moviehistory).sort()) {
-        var dates = moviehistory[movie].split(',');
+    let dates_to_movies = {};
+    let movies_to_dates = cookiedict();
+    for (const movie of Object.keys(movies_to_dates).sort()) {
+        let dates = movies_to_dates[movie].split(',');
         for (const date of dates)
-            movies[date] = movie;   // assume at most one movie per day
+            dates_to_movies[date] = movie;   // assume at most one movie per day
     }
-    delete movies[''];
-    var s = '';
-    for (var dateiso of Object.keys(movies).sort()) {
+
+    let s = '';
+    for (const dateiso of Object.keys(dates_to_movies).sort()) {
         s += '<tr>' +
              '<td>' + date_iso_to_loc(dateiso) + '</td>' +
-             '<td class="dates">' + movies[dateiso] + '</td>' +
+             '<td class="dates">' + dates_to_movies[dateiso] + '</td>' +
              '</tr>';
     }
     document.getElementById("content").innerHTML = s;
@@ -125,32 +121,33 @@ function onClickRestore() {
 }
 
 function restore_history(s) {
-    var lines = s.split('\r\n');
+    // remove all movie cookies
+    let movies_to_dates = cookiedict();
+    for (const movie in movies_to_dates)
+        remcookie(movie);
 
-    var dates = {};
-    for (const line of lines) {
+    // get new movie cookies
+    movies_to_dates = {};
+    for (const line of s.split('\r\n')) {
         if (line.search(/\d\d\d\d-\d\d-\d\d/) < 0) {
             movie = line.trim();
         } else {
-            dates[movie] = line;
+            movies_to_dates[movie] = line;
         }
     }
-    for (var movie in dates) {
-        setcookie(movie, dates[movie]);
-    }
-    moviehistory = cookiedict();
-    for (const movie of Object.keys(moviehistory))
-        if (!(movie in dates))
-            remcookie(movie);
+
+    // set new movie cookies
+    for (const movie in movies_to_dates)
+        setcookie(movie, movies_to_dates[movie]);
 
     location.reload();
 }
 
 async function save_history() {
-    var s = '';
-    moviehistory = cookiedict();
-    for (const movie of Object.keys(moviehistory).sort()) {
-        var dates = moviehistory[movie].split(",");
+    let s = '';
+    let movies_to_dates = cookiedict();
+    for (const movie of Object.keys(movies_to_dates).sort()) {
+        let dates = movies_to_dates[movie].split(",");
         s += movie + '\n';
         for (const date of dates) {
             s += date + '\n';
