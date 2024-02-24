@@ -89,16 +89,24 @@ function show_history_by_date() {
     let movies_to_dates = cookiedict();
     for (const movie of Object.keys(movies_to_dates).sort()) {
         let dates = movies_to_dates[movie].split(',');
-        for (const date of dates)
-            dates_to_movies[date] = movie;   // assume at most one movie per day
+        for (const date of dates) {
+            if (!(date in dates_to_movies))
+                dates_to_movies[date] = [];
+            dates_to_movies[date].push(movie);
+        }
     }
 
     let s = '';
     for (const dateiso of Object.keys(dates_to_movies).sort()) {
         s += '<tr>' +
              '<td>' + date_iso_to_loc(dateiso) + '</td>' +
-             '<td class="dates">' + dates_to_movies[dateiso] + '</td>' +
+             '<td class="dates">' + dates_to_movies[dateiso][0] + '</td>' +
              '</tr>';
+        for (const movie of dates_to_movies[dateiso].slice(1))
+            s += '<tr>' +
+                 '<td>' + '</td>' +
+                 '<td class="dates">' + movie + '</td>' +
+                 '</tr>';
     }
     document.getElementById("content").innerHTML = s;
 }
