@@ -18,6 +18,15 @@ td.dates {
   padding-right: 15px;
   text-align: left;
 }
+h2 {
+  line-height: 18px;
+  border-top: 2px solid lightgrey;
+  border-bottom: 2px solid lightgrey;
+  padding-top:5px;
+  padding-bottom:5px;
+  font: normal 16px Verdana, Arial, sans-serif;
+}
+
 </style>
 <script>
 function cookiedict() {
@@ -41,6 +50,18 @@ function remcookie(movie) {
     document.cookie = `movielib-${movie}=;samesite=lax;max-age=0;path=/`;
 }
 
+function set_history_status(value) {
+    document.cookie = `history_status=${value};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
+}
+
+function get_history_status() {
+    for (const pair of document.cookie.split("; ")) {
+        if (pair.startsWith('history_status'))
+            return pair.split("=")[1];
+    }
+    return null;
+}
+
 function date_iso_to_loc(dateiso) {
     const options = {
         year: 'numeric',
@@ -52,6 +73,11 @@ function date_iso_to_loc(dateiso) {
 
 function onload() {
     show_history();
+
+    if (get_history_status() === '1')
+        document.getElementById("statusmsg").innerHTML = '';
+    else
+        document.getElementById("statusmsg").innerHTML = '&#9888 History not saved.';
 }
 
 function sort_by_movie() {
@@ -149,6 +175,7 @@ function restore_history(s) {
         setcookie(movie, movies_to_dates[movie]);
 
     location.reload();
+    set_history_status(1);
 }
 
 async function save_history() {
@@ -164,6 +191,7 @@ async function save_history() {
     try {
         await navigator.clipboard.writeText(s);
         alert('Content copied to clipboard');
+        set_history_status(1);
     } catch (err) {
         alert('Failed to copy: ', err);
     }
@@ -178,6 +206,7 @@ async function save_history() {
     {% include 'menu.htm' %}
 </div>
 
+<h2>
 <input type="file" id="load_input" onchange="onClickRestore()" style="display:none;"/>
 <input type="button"
        onclick="document.getElementById('load_input').click()"
@@ -186,7 +215,8 @@ async function save_history() {
 <input type="button" onclick="save_history();" value="Save history" />
 <input type="button" onclick="sort_by_movie();" value="Sort by movie" />
 <input type="button" onclick="sort_by_date();" value="Sort by date" />
-<hr>
+<span id='statusmsg' style="margin-left:5px"></span>
+</h2>
 
 <table id="content">
 </table>

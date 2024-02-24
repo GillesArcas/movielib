@@ -42,6 +42,10 @@ function getcookie(movie) {
     return null;
 }
 
+function set_history_status(value) {
+    document.cookie = `history_status=${value};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
+}
+
 function date_iso_to_loc(dateiso) {
     const options = {
         year: 'numeric',
@@ -69,6 +73,7 @@ function add_date() {
     let dates = (prevdates === null) ? today : (prevdates + ',' + today);
 
     setcookie(movie, dates);
+    set_history_status(0);
     onload();
 }
 </script>

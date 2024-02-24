@@ -32,10 +32,27 @@ body {
   background-color: #00A4BD;
 }
 </style>
+<script>
+function get_history_status() {
+    for (const pair of document.cookie.split("; ")) {
+        if (pair.startsWith('history_status'))
+            return pair.split("=")[1];
+    }
+    return null;
+}
+
+function on_mouse_enter() {
+    if (get_history_status() === '1')
+        document.getElementById("status").innerHTML = '';
+    else
+        document.getElementById("status").innerHTML = ' &#9888';
+}
+</script>
+
 <div class="dropdown" style="width: 100%; position: fixed; width: 120px; top: 22px; right: 43px; ">
-  <img src="{{path_to_gallery}}menu-short.png" align="right"/>
+  <img src="{{path_to_gallery}}menu-short.png" align="right" onmouseenter="on_mouse_enter()"/>
   <div class="dropdown-content">
-  <img src="{{path_to_gallery}}menu-short.png" align="right"/>
+  <img src="{{path_to_gallery}}menu-short.png" align="right" onmouseenter="on_mouse_enter()"/>
   <p style="height:12px" ></p>
   <a href="{{path_to_gallery}}movies-vrac.htm">{{T('Storage order')}}</a>
   <a href="{{path_to_gallery}}movies-year.htm">{{T('Sort by year')}}</a>
@@ -43,6 +60,6 @@ body {
   <a href="{{path_to_gallery}}movies-director.htm">{{T('Sort by director')}}</a>
   <a href="{{path_to_gallery}}movies-actor.htm">{{T('Sort by actor')}}</a>
   <a href="{{path_to_gallery}}movies-stats.htm">{{T('Statistics')}}</a>
-  <a href="{{path_to_gallery}}movies-history.htm">{{T('History')}}</a>
+  <a href="{{path_to_gallery}}movies-history.htm">{{T('History')}}<span id='status'></span></a>
   </div>
 </div>
