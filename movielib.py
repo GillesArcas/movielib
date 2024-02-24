@@ -23,7 +23,7 @@ from pathlib import Path
 import requests
 from PIL import Image
 from imdb import Cinemagoer
-from jinja2 import Environment, FileSystemLoader
+import jinja2
 
 
 MOVIE_TSV = 'movie.tsv'
@@ -419,7 +419,38 @@ def create_missing_records(rep, forcejson=False):
 # -- Pass 3: make gallery html files and thumbnails ---------------------------
 
 
-def load_records(rep):
+def update_movie_record(rep, movienum, dirpath, filename, barename, record, forcethumb=False):
+    html_basename = barename + '.htm'
+    html_name = os.path.join(dirpath, html_basename)
+
+    record['movienum'] = movienum
+    record['dirpath'] = dirpath
+    record['filename'] = filename
+    record['barename'] = barename
+    record['cover'] = barename + '.jpg'
+    image_basename = record['cover']
+    image_name = os.path.join(dirpath, image_basename)
+    record['year_title'] = f"{record['year']}: {record['title']}"
+    record['thumb_path'] = os.path.join('.thumbnails', thumbname(record['cover'], 'film'))
+    record['hover_text'] = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
+    record['movie_page'] = escape_open_url(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
+    nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
+    record['relpath_to_root'] = '../' * nback
+    thumb_basename = thumbname(record['cover'], 'film')
+    thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
+
+    if forcethumb or os.path.isfile(thumb_name) is False or time_ordered(image_name, thumb_name) is False:
+        if os.path.isfile(image_name):
+            width, height = Image.open(image_name).size
+            thumbsize = size_thumbnail(width, height, maxdim=300)
+            args = types.SimpleNamespace()
+            args.forcethumb = True
+            make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+        else:
+            print('Warning: no image for', os.path.join(dirpath, filename))
+
+
+def load_records(rep, forcethumb):
     records = []
     for movienum, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
         jsonname = os.path.join(dirpath, barename + '.json')
@@ -428,15 +459,19 @@ def load_records(rep):
         else:
             with open(jsonname) as f:
                 record = json.loads(f.read())
-            record['movienum'] = movienum
-            record['dirpath'] = dirpath
-            record['filename'] = filename
-            record['barename'] = barename
-            record['cover'] = barename + '.jpg'
-            record['year_title'] = f"{record['year']}: {record['title']}"
-            nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)
-            record['relpath_to_root'] = '../' * nback
+
+            update_movie_record(rep, movienum, dirpath, filename, barename, record, forcethumb)
             records.append(record)
+
+    titles_to_records = defaultdict(list)
+    for record in records:
+        titles_to_records[record['title']].append(record)
+    for records_same_title in titles_to_records.values():
+        for record in records_same_title:
+            if len(records_same_title) == 1:
+                record['title_uniq'] = record['title']
+            else:
+                record['title_uniq'] = f"{record['title']} ({record['year']})"
 
     return records
 
@@ -502,36 +537,9 @@ def urlencode(url):
     return url
 
 
-def update_movie_record(rep, record, forcethumb=False):
-    movie_name = os.path.join(record['dirpath'], record['filename'])
-    image_basename = record['cover']
-    image_name = os.path.join(record['dirpath'], image_basename)
-    thumb_basename = thumbname(record['cover'], 'film')
-    thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
-    html_basename = record['barename'] + '.htm'
-    html_name = os.path.join(record['dirpath'], html_basename)
-
-    record['thumb_path'] = os.path.join('.thumbnails', thumb_basename)
-    record['hover_text'] = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
-    record['movie_page'] = escape_open_url(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
-
-    if forcethumb or os.path.isfile(thumb_name) is False or time_ordered(image_name, thumb_name) is False:
-        args = types.SimpleNamespace()
-        args.forcethumb = True
-        if os.path.isfile(image_name):
-            width, height = Image.open(image_name).size
-            thumbsize = size_thumbnail(width, height, maxdim=300)
-            make_thumbnail_image(args, image_name, thumb_name, thumbsize)
-        else:
-            print('Warning: no image for', movie_name)
-
-
 def make_gallery_page(pagename, rep, records, translate, forcethumb, index, sorted_records, tags, caption):
-    for record in records:
-        update_movie_record(rep, record, forcethumb=forcethumb)
-
-    file_loader = FileSystemLoader(os.path.dirname(__file__))
-    env = Environment(loader=file_loader)
+    file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
+    env = jinja2.Environment(loader=file_loader)
     template = env.get_template(TEMPLATE_GALLERY)
 
     html = template.render(
@@ -632,7 +640,7 @@ def make_stats_page(rep, records, translate):
     total = 0
     for record in records:
         data.append((
-            record['title'],
+            record['title_uniq'],
             record['year'],
             record['width'],
             record['height'],
@@ -642,8 +650,8 @@ def make_stats_page(rep, records, translate):
 
     data.append(('Total', '', '', '', space_thousands(total)))
 
-    file_loader = FileSystemLoader(os.path.dirname(__file__))
-    env = Environment(loader=file_loader)
+    file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
+    env = jinja2.Environment(loader=file_loader)
     template = env.get_template(TEMPLATE_STATS)
 
     html = template.render(
@@ -657,8 +665,8 @@ def make_stats_page(rep, records, translate):
 
 
 def make_history_page(rep, translate):
-    file_loader = FileSystemLoader(os.path.dirname(__file__))
-    env = Environment(loader=file_loader)
+    file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
+    env = jinja2.Environment(loader=file_loader)
     template = env.get_template(TEMPLATE_HISTORY)
 
     html = template.render(
@@ -798,8 +806,8 @@ def make_movie_pages(rep, records, translate):
     for actor, movies in actor_movies.items():
         actor_movies[actor] = sorted(movies)
 
-    file_loader = FileSystemLoader(os.path.dirname(__file__))
-    env = Environment(loader=file_loader)
+    file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
+    env = jinja2.Environment(loader=file_loader)
     template = env.get_template(TEMPLATE_MOVIE)
 
     for record in records:
@@ -816,7 +824,7 @@ def make_html_pages(rep, language, forcethumb):
         return string if language == 'EN' else langdict[string]
 
     os.makedirs(os.path.join(rep, '.gallery', '.thumbnails'), exist_ok=True)
-    records = load_records(rep)
+    records = load_records(rep, forcethumb)
     load_main_cast(records)
     make_vrac_page(rep, records, translate, forcethumb=forcethumb)
     make_year_page(rep, records, translate, forcethumb=False)
