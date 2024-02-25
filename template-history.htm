@@ -140,15 +140,7 @@ function show_history_by_date() {
 function onClickRestore() {
     const [file] = document.querySelector("input[type=file]").files;
     const reader = new FileReader();
-
-    reader.addEventListener(
-        "load",
-        () => {
-            restore_history(reader.result);
-        },
-        false,
-    );
-
+    reader.addEventListener("load", () => {restore_history(reader.result);}, false,);
     if (file) {
         reader.readAsText(file);
     }
@@ -178,23 +170,56 @@ function restore_history(s) {
     set_history_status(1);
 }
 
-async function save_history() {
-    let s = '';
+function formatted_history_for_saving() {
+    let dates_to_movies = {};
     let movies_to_dates = cookiedict();
     for (const movie of Object.keys(movies_to_dates).sort()) {
-        let dates = movies_to_dates[movie].split(",");
-        s += movie + '\n';
+        let dates = movies_to_dates[movie].split(',');
         for (const date of dates) {
-            s += date + '\n';
+            if (!(date in dates_to_movies))
+                dates_to_movies[date] = [];
+            dates_to_movies[date].push(movie);
         }
     }
+    let s = '';
+    for (const dateiso of Object.keys(dates_to_movies).sort())
+        for (const movie of dates_to_movies[dateiso])
+            s += movie + '\n' + dateiso + '\n';
+    return s;
+}
+
+async function save_history_with_copy_paste() {
+    // not used
+    s = formatted_history_for_saving();
     try {
         await navigator.clipboard.writeText(s);
         alert('Content copied to clipboard');
+        location.reload();
         set_history_status(1);
     } catch (err) {
         alert('Failed to copy: ', err);
     }
+}
+
+function download(content, mimeType, filename){
+    let a = document.createElement('a');
+    let blob = new Blob([content], {type: mimeType});
+    let url = URL.createObjectURL(blob);
+    a.setAttribute('href', url);
+    a.setAttribute('download', filename);
+    a.click();
+}
+
+function save_history_with_anchor_download() {
+    // no feedback on user action, assume user confirms download
+    s = formatted_history_for_saving();
+    set_history_status(1);
+    location.reload();
+    download(s, 'text/plain', 'history.txt');
+}
+
+function save_history() {
+    save_history_with_anchor_download();
 }
 </script>
 </head>
