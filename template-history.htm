@@ -154,12 +154,12 @@ function restore_history(s) {
 
     // get new movie cookies
     movies_to_dates = {};
-    for (const line of s.split('\r\n')) {
-        if (line.search(/\d\d\d\d-\d\d-\d\d/) < 0) {
+    let movie;
+    for (const line of s.split(/\r?\n/)) {
+        if (line.search(/\d\d\d\d-\d\d-\d\d/) < 0)
             movie = line.trim();
-        } else {
+        else
             movies_to_dates[movie] = line;
-        }
     }
 
     // set new movie cookies
@@ -181,11 +181,11 @@ function formatted_history_for_saving() {
             dates_to_movies[date].push(movie);
         }
     }
-    let s = '';
+    let list = [];
     for (const dateiso of Object.keys(dates_to_movies).sort())
         for (const movie of dates_to_movies[dateiso])
-            s += movie + '\n' + dateiso + '\n';
-    return s;
+            list.push(movie, dateiso);
+    return list.join('\n');
 }
 
 async function save_history_with_copy_paste() {

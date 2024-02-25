@@ -2,11 +2,11 @@
 <html>
 
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" >
 <title>{{title}}</title>
-<link rel="icon" href="{{icon}}" />
+<link rel="icon" href="{{icon|urlencode}}" >
 
-<style type="text/css">
+<style>
 body {
   font: normal 14px Verdana, Arial, sans-serif;
 }
@@ -55,15 +55,21 @@ function date_iso_to_loc(dateiso) {
     return new Date(dateiso).toLocaleDateString("fr-FR", options);
 }
 
-function onload() {
+function history_ul() {
+    s = "<ul style='margin-top:2px;'>\n";
     let dates = getcookie("{{record['title_uniq']}}");
     if (dates !== null) {
-        let s = '';
         for (const dateiso of dates.split(',')) {
-            s += '<li>' + date_iso_to_loc(dateiso) + '</li>';
+            s += '<li>' + date_iso_to_loc(dateiso) + '</li>\n';
         }
-        document.getElementById("history").innerHTML = s;
     }
+    s += "<li><a href='javascript:add_date();' title=\"{{T('Add as viewed today')}}\">...</a></li>\n";
+    s += "</ul>\n";
+    return s;
+}
+
+function onload() {
+    document.getElementById("history").innerHTML = history_ul();
 }
 
 function add_date() {
@@ -102,11 +108,8 @@ function add_date() {
 <br>
 
 <p style='margin-bottom:0;' >{{T('History')}}:</p>
-<ul style='margin-top:2px;'>
 <div id="history">
 </div>
-<li><a href='javascript:add_date();' title="{{T('Add as viewed today')}}">...</a></li>
-</ul>
 </div>
 
 <div class="float-child" style="width: 33%;">
@@ -128,7 +131,7 @@ function add_date() {
 {% else %}
     {% for director in record.director_list %}
         {% if loop.index <= 2 %}
-            <li><a href="https://en.wikipedia.org/wiki/{{director}}">{{director}}</a></li>
+            <li><a href="https://en.wikipedia.org/wiki/{{director|urlencode}}">{{director}}</a></li>
         {% else %}
             <li title="{{director}}">...</li>
         {% endif %}
@@ -143,7 +146,7 @@ function add_date() {
 {% else %}
     {% for actor in record.actor_list %}
         {% if loop.index < loop.length %}
-            <li><a href="https://en.wikipedia.org/wiki/{{actor}}">{{actor}}</a></li>
+            <li><a href="https://en.wikipedia.org/wiki/{{actor|urlencode}}">{{actor}}</a></li>
         {% else %}
             <li title="{{actor}}">...</li>
         {% endif %}
