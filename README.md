@@ -58,7 +58,7 @@ This command creates and updates all web pages and intermediate files.
 
 * `movielib --import_imdb_data`
 
-This commands enables to download from IMDb and compile to a suitable format the data required to make the link from titles to IMDb Ids. This is done quietly by `--update` a single time when creating the collection. To use more recent data, it is necessary to force the import and this is done by the command.
+This command enables to download from IMDb and compile to a suitable format the data required to make the link from titles to IMDb Ids. This is done quietly by `--update` a single time when creating the collection. To use more recent data, it is necessary to force the import and this is done by the command.
 
 ## Translation
 
