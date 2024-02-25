@@ -28,7 +28,6 @@ import jinja2
 
 MOVIE_TSV = 'movie.tsv'
 TITLES_INDEX = 'titlestsv.pickle'
-MENUFILE = 'menu.htm'
 TEMPLATE_GALLERY = 'template-gallery.htm'
 TEMPLATE_STATS = 'template-stats.htm'
 TEMPLATE_HISTORY = 'template-history.htm'
@@ -836,7 +835,7 @@ def make_html_pages(rep, language, forcethumb):
     make_movie_pages(rep, records, translate)
     purge_thumbnails(rep, records)
     shutil.copy(installname('index.htm'), rep)
-    for fn in (MENUFILE, 'menu.png', 'movies-icon.png', 'top-icon.png'):
+    for fn in ('menu.png', 'movies-icon.png', 'top-icon.png'):
         shutil.copy(installname(fn), os.path.join(rep, '.gallery'))
 
 

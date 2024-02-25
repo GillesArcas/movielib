@@ -1,7 +1,7 @@
 FR
 Storage order           Vrac
 Sort by year            Tri par année
-Alphabetical order      Tri alphabétique
+Sort by title           Tri par titre
 Sort by director        Tri par metteur en scène
 Sort by actor           Tri par acteur
 Statistics              Statistiques

@@ -1,37 +1,3 @@
-<style>
-body {
-  font: normal 14px Verdana, Arial, sans-serif;
-}
-.dropdown {
-  display: inline-block;
-  position: relative;
-}
-.dropdown-content {
-  display: none;
-  position: absolute;
-  width: 100%;
-  overflow: auto;
-  box-shadow: 0px 10px 10px 0px rgba(0,0,0,0.4);
-  background-color: white;
-}
-.dropdown:hover .dropdown-content {
-  display: block;
-}
-.dropdown-content a {
-  display: block;
-  color: #000000;
-  padding: 5px;
-  text-decoration: none;
-}
-.dropdown-content img {
-  display: block;
-  padding: 0px;
-}
-.dropdown-content a:hover {
-  color: #FFFFFF;
-  background-color: #00A4BD;
-}
-</style>
 <script>
 function get_history_status() {
     for (const pair of document.cookie.split("; ")) {
@@ -50,13 +16,13 @@ function on_mouse_enter() {
 </script>
 
 <div class="dropdown" style="width: 100%; position: fixed; width: 120px; top: 22px; right: 43px; ">
-  <img src="{{path_to_gallery}}menu-short.png" align="right" onmouseenter="on_mouse_enter()"/>
+  <img src="{{path_to_gallery}}menu-short.png" align="right" onmouseenter="on_mouse_enter()" >
   <div class="dropdown-content">
-  <img src="{{path_to_gallery}}menu-short.png" align="right" onmouseenter="on_mouse_enter()"/>
+  <img src="{{path_to_gallery}}menu-short.png" align="right" onmouseenter="on_mouse_enter()" >
   <p style="height:12px" ></p>
   <a href="{{path_to_gallery}}movies-vrac.htm">{{T('Storage order')}}</a>
+  <a href="{{path_to_gallery}}movies-alpha.htm">{{T('Sort by title')}}</a>
   <a href="{{path_to_gallery}}movies-year.htm">{{T('Sort by year')}}</a>
-  <a href="{{path_to_gallery}}movies-alpha.htm">{{T('Alphabetical order')}}</a>
   <a href="{{path_to_gallery}}movies-director.htm">{{T('Sort by director')}}</a>
   <a href="{{path_to_gallery}}movies-actor.htm">{{T('Sort by actor')}}</a>
   <a href="{{path_to_gallery}}movies-stats.htm">{{T('Statistics')}}</a>

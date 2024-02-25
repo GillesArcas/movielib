@@ -29,6 +29,7 @@ a.disabled {
   color: lightgrey;
 }
 </style>
+{% include 'menu.css' %}
 <script>
 function setcookie(movie, dates) {
     document.cookie = `movielib-${movie}=${dates};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
@@ -93,11 +94,11 @@ function add_date() {
     </div>
 
 <div class="float-child" style="width: 240px;">
-<img src="{{record.cover}}" width=200px style="box-shadow: 1px 1px 5px 5px  #c0c0c0"/>
+<img src="{{record.cover|urlencode}}" width="200" style="box-shadow: 1px 1px 5px 5px  #c0c0c0">
 <br>
 <br>
 <br>
-<a href="{{movie_link}}">{{T('Play')}}</a>
+<a href="{{movie_link|urlencode}}">{{T('Play')}}</a>
 <br>
 <a {{imdb_link}}>{{T('Show on IMDB')}}</a>
 <br>
@@ -179,7 +180,7 @@ function add_date() {
             <li>None</li>
         {% else %}
             {% for movie, path in zip(movies, paths) %}
-                <li><a href="{{path}}">{{movie}}</a></li>
+                <li><a href="{{path|urlencode}}">{{movie}}</a></li>
             {% endfor %}
         {% endif %}
         </ul>
