@@ -430,7 +430,7 @@ def update_movie_record(rep, movienum, dirpath, filename, barename, record, forc
     image_basename = record['cover']
     image_name = os.path.join(dirpath, image_basename)
     record['year_title'] = f"{record['year']}: {record['title']}"
-    record['thumb_path'] = os.path.join('.thumbnails', thumbname(record['cover'], 'film'))
+    record['thumb_path'] = f".thumbnails/{thumbname(record['cover'], 'film')}"
     record['hover_text'] = f"{record['title']}, {record['year']}, {', '.join(record['director'])}"
     record['movie_page'] = escape_open_url(os.path.relpath(html_name, start=os.path.join(rep, '.gallery')))
     nback = len(Path(record['dirpath']).parts) - len(Path(rep).parts)

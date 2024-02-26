@@ -1,10 +1,11 @@
+<!DOCTYPE html>
 <html>
 
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" >
 <title>Films</title>
-<link rel="icon" href="{{icon}}" />
-<style type="text/css">
+<link rel="icon" href="{{icon}}" >
+<style>
 body {
   font: normal 14px Verdana, Arial, sans-serif;
 }
@@ -19,8 +20,9 @@ p {
   margin-top:0px;
   margin-bottom:10px;
 }
-span {
-  display:inline-table;
+div.image {
+  display:inline-table;  /* or inline-grid */
+  margin-bottom:5px;
   width:160px;
   align-items: center;
 }
@@ -32,10 +34,10 @@ h2 {
   padding-bottom:5px;
 }
 img.cover {
-  max-width:160px;
-  max-height:240px;
-  width=auto;
-  height=auto;
+  max-width: 160px;
+  max-height: 240px;
+  width: auto;
+  height: auto;
 }
 div.anchor {
   visibility: hidden;
@@ -74,15 +76,15 @@ div.anchor {
         <h2>{{key}} <img src="top-icon.png" style="float: right;" onclick="window.location.href='#top'" /></h2>
     {% endif %}
     {% for record in records %}
-        <span>
+        <div class="image">
         <img
             class="cover"
-            src="{{record.thumb_path}}"
+            src="{{record.thumb_path|urlencode}}"
             alt="{{record.title}} cover"
             title="{{record.hover_text}}"
-            onclick="window.open('{{record.movie_page}}', '_self')" />
+            onclick="window.open('{{record.movie_page}}', '_self')" >
         <p>{{record.year_title if caption else record.title}}</p>
-        </span>
+        </div>
     {% endfor %}
 {% endfor %}
 
