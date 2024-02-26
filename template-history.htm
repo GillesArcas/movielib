@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="{{language}}">
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" >
 <title>History</title>
-<link rel="icon" href="{{icon}}" />
-<style type="text/css">
+<link rel="icon" href="{{icon}}" >
+<style>
 body {
   font: normal 14px Verdana, Arial, sans-serif;
 }
@@ -18,10 +18,11 @@ td.dates {
   padding-right: 15px;
   text-align: left;
 }
-h2 {
+div.h2like {
   line-height: 18px;
   border-top: 2px solid lightgrey;
   border-bottom: 2px solid lightgrey;
+  margin-top:17px;
   padding-top:5px;
   padding-bottom:5px;
   font: normal 16px Verdana, Arial, sans-serif;
@@ -231,17 +232,17 @@ function save_history() {
     {% include 'menu.htm' %}
 </div>
 
-<h2>
-<input type="file" id="load_input" onchange="onClickRestore()" style="display:none;"/>
+<div class="h2like">
+<input type="file" id="load_input" onchange="onClickRestore()" style="display:none;">
 <input type="button"
        onclick="document.getElementById('load_input').click()"
-       value="Restore history" />
+       value="Restore history" >
 
-<input type="button" onclick="save_history();" value="Save history" />
-<input type="button" onclick="sort_by_movie();" value="Sort by movie" />
-<input type="button" onclick="sort_by_date();" value="Sort by date" />
+<input type="button" onclick="save_history();" value="Save history" >
+<input type="button" onclick="sort_by_movie();" value="Sort by movie" >
+<input type="button" onclick="sort_by_date();" value="Sort by date" >
 <span id='statusmsg' style="margin-left:5px"></span>
-</h2>
+</div>
 
 <table id="content">
 </table>

@@ -94,7 +94,7 @@ function add_date() {
     </div>
 
 <div class="float-child" style="width: 240px;">
-<img src="{{record.cover|urlencode}}" width="200" style="box-shadow: 1px 1px 5px 5px  #c0c0c0">
+<img src="{{record.cover|urlencode}}" width="200" alt="Cover" style="box-shadow: 1px 1px 5px 5px  #c0c0c0">
 <br>
 <br>
 <br>
@@ -192,7 +192,7 @@ function add_date() {
         <h3>{{T('Other movies of')}} {{actor}} {{T('in collection')}}</h3>
         <ul>
             {% for movie, path in zip(movies, paths) %}
-                <li><a href="{{path}}">{{movie}}</a></li>
+                <li><a href="{{path|urlencode}}">{{movie}}</a></li>
             {% endfor %}
        </ul>
     {% endif %}
