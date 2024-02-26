@@ -129,6 +129,9 @@ def space_thousands(n):
     return f'{n:,}'.replace(',', ' ')
 
 
+# -- Language -----------------------------------------------------------------
+
+
 def lang_choices():
     choices = ['EN']
     with open(installname(TRANSLATIONS), encoding='utf-8') as f:
@@ -145,6 +148,13 @@ def lang_dict(language):
         for line in f:
             pairs.append(re.split(' {3,}', line.strip()))
     return dict(pairs)
+
+
+def translate_function(language):
+    langdict = None if language == 'EN' else lang_dict(language)
+    def translate(string):
+        return string if language == 'EN' else langdict[string]
+    return translate
 
 
 # -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
@@ -536,7 +546,7 @@ def urlencode(url):
     return url
 
 
-def make_gallery_page(pagename, rep, records, translate, forcethumb, index, sorted_records, tags, caption):
+def make_gallery_page(pagename, rep, records, language, forcethumb, index, sorted_records, tags, caption):
     file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
     env = jinja2.Environment(loader=file_loader)
     template = env.get_template(TEMPLATE_GALLERY)
@@ -549,20 +559,21 @@ def make_gallery_page(pagename, rep, records, translate, forcethumb, index, sort
         caption=caption,
         path_to_gallery='',
         icon='movies-icon.png',
-        T=translate
+        language=language,
+        T=translate_function(language)
     )
     with open(os.path.join(rep, '.gallery', pagename), 'wt', encoding='utf-8') as f:
         print(html, file=f)
 
 
-def make_vrac_page(rep, records, translate, forcethumb):
+def make_vrac_page(rep, records, language, forcethumb):
     sorted_records = {None: records}
     tags = {None: None}
     index = None
-    make_gallery_page(MOVIES_VRAC, rep, records, translate, forcethumb, index, sorted_records, tags, False)
+    make_gallery_page(MOVIES_VRAC, rep, records, language, forcethumb, index, sorted_records, tags, False)
 
 
-def make_year_page(rep, records, translate, forcethumb):
+def make_year_page(rep, records, language, forcethumb):
     movies_by_year = defaultdict(list)
     for record in records:
         movies_by_year[record['year']].append(record)
@@ -577,10 +588,10 @@ def make_year_page(rep, records, translate, forcethumb):
             tags[year] = None
     index = list(sorted(first_year_in_decade))
 
-    make_gallery_page(MOVIES_YEAR, rep, records, translate, forcethumb, index, movies_by_year, tags, False)
+    make_gallery_page(MOVIES_YEAR, rep, records, language, forcethumb, index, movies_by_year, tags, False)
 
 
-def make_alpha_page(rep, records, translate, forcethumb):
+def make_alpha_page(rep, records, language, forcethumb):
     movies_by_alpha = defaultdict(list)
     for record in records:
         movies_by_alpha[record['title'][0].upper()].append(record)
@@ -591,10 +602,10 @@ def make_alpha_page(rep, records, translate, forcethumb):
         movies_by_alpha[char] = sorted(movies, key=lambda rec: rec['title'])
     index = list(sorted(tags))
 
-    make_gallery_page(MOVIES_ALPHA, rep, records, translate, forcethumb, index, movies_by_alpha, tags, False)
+    make_gallery_page(MOVIES_ALPHA, rep, records, language, forcethumb, index, movies_by_alpha, tags, False)
 
 
-def make_director_page(rep, records, translate, forcethumb):
+def make_director_page(rep, records, language, forcethumb):
     movies_by_director = defaultdict(list)
     for record in records:
         for director in record['director']:
@@ -611,10 +622,10 @@ def make_director_page(rep, records, translate, forcethumb):
             tags[director] = None
     index = list(sorted(first_director))
 
-    make_gallery_page(MOVIES_DIRECTOR, rep, records, translate, forcethumb, index, movies_by_director, tags, True)
+    make_gallery_page(MOVIES_DIRECTOR, rep, records, language, forcethumb, index, movies_by_director, tags, True)
 
 
-def make_actor_page(rep, records, translate, forcethumb):
+def make_actor_page(rep, records, language, forcethumb):
     movies_by_actor = defaultdict(list)
     for record in records:
         for actor in record['main_cast']:
@@ -631,10 +642,10 @@ def make_actor_page(rep, records, translate, forcethumb):
             tags[actor] = None
     index = list(sorted(first_actor))
 
-    make_gallery_page(MOVIES_ACTOR, rep, records, translate, forcethumb, index, movies_by_actor, tags, True)
+    make_gallery_page(MOVIES_ACTOR, rep, records, language, forcethumb, index, movies_by_actor, tags, True)
 
 
-def make_stats_page(rep, records, translate):
+def make_stats_page(rep, records, language):
     data = []
     total = 0
     for record in records:
@@ -657,13 +668,14 @@ def make_stats_page(rep, records, translate):
         data=data,
         path_to_gallery='',
         icon='movies-icon.png',
-        T=translate
+        language=language,
+        T=translate_function(language)
     )
     with open(os.path.join(rep, '.gallery', MOVIES_STATS), 'wt', encoding='utf-8') as f:
         print(html, file=f)
 
 
-def make_history_page(rep, translate):
+def make_history_page(rep, language):
     file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
     env = jinja2.Environment(loader=file_loader)
     template = env.get_template(TEMPLATE_HISTORY)
@@ -671,7 +683,8 @@ def make_history_page(rep, translate):
     html = template.render(
         path_to_gallery='',
         icon='movies-icon.png',
-        T=translate
+        language=language,
+        T=translate_function(language)
     )
     with open(os.path.join(rep, '.gallery', MOVIES_HISTORY), 'wt', encoding='utf-8') as f:
         print(html, file=f)
@@ -731,7 +744,7 @@ def relpath_to_movie(rep, records, record, yearmovie, yearmovie_num):
     return record['relpath_to_root'] + os.path.join(path, record_target['barename'] + '.htm')
 
 
-def movie_record_html(rep, records, record, translate, yearmovie_num, director_movies, actor_movies, template):
+def movie_record_html(rep, records, record, language, yearmovie_num, director_movies, actor_movies, template):
     if not record['director']:
         record['director_list'] = []
     else:
@@ -782,13 +795,14 @@ def movie_record_html(rep, records, record, translate, yearmovie_num, director_m
         path_to_gallery=record['relpath_to_root'] + '.gallery/',
         zip=zip,
         space_thousands=space_thousands,
-        T=translate
+        language=language,
+        T=translate_function(language)
     )
 
     return html
 
 
-def make_movie_pages(rep, records, translate):
+def make_movie_pages(rep, records, language):
     yearmovie_num = {}
     for record in records:
         yearmovie_num[record['year_title']] = record['movienum']
@@ -810,7 +824,7 @@ def make_movie_pages(rep, records, translate):
     template = env.get_template(TEMPLATE_MOVIE)
 
     for record in records:
-        html = movie_record_html(rep, records, record, translate, yearmovie_num, director_movies, actor_movies, template)
+        html = movie_record_html(rep, records, record, language, yearmovie_num, director_movies, actor_movies, template)
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
         with open(html_name, 'wt', encoding='utf-8') as f:
@@ -825,14 +839,14 @@ def make_html_pages(rep, language, forcethumb):
     os.makedirs(os.path.join(rep, '.gallery', '.thumbnails'), exist_ok=True)
     records = load_records(rep, forcethumb)
     load_main_cast(records)
-    make_vrac_page(rep, records, translate, forcethumb=forcethumb)
-    make_year_page(rep, records, translate, forcethumb=False)
-    make_director_page(rep, records, translate, forcethumb=False)
-    make_alpha_page(rep, records, translate, forcethumb=False)
-    make_actor_page(rep, records, translate, forcethumb=False)
-    make_stats_page(rep, records, translate)
-    make_history_page(rep, translate);
-    make_movie_pages(rep, records, translate)
+    make_vrac_page(rep, records, language, forcethumb=forcethumb)
+    make_year_page(rep, records, language, forcethumb=False)
+    make_director_page(rep, records, language, forcethumb=False)
+    make_alpha_page(rep, records, language, forcethumb=False)
+    make_actor_page(rep, records, language, forcethumb=False)
+    make_stats_page(rep, records, language)
+    make_history_page(rep, language);
+    make_movie_pages(rep, records, language)
     purge_thumbnails(rep, records)
     shutil.copy(installname('index.htm'), rep)
     for fn in ('menu.png', 'movies-icon.png', 'top-icon.png'):
