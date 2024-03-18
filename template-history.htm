@@ -44,7 +44,7 @@ function cookiedict() {
 }
 
 function setcookie(movie, dates) {
-    document.cookie = `movielib-${movie}=${dates};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
+    document.cookie = `movielib-${movie}=${dates};samesite=lax;max-age=31536000;path=/`;
 }
 
 function remcookie(movie) {
@@ -52,7 +52,7 @@ function remcookie(movie) {
 }
 
 function set_history_status(value) {
-    document.cookie = `history_status=${value};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
+    document.cookie = `history_status=${value};samesite=lax;max-age=31536000;path=/`;
 }
 
 function get_history_status() {

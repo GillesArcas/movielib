@@ -104,6 +104,7 @@ def get_dimensions(filename):
 
 def get_duration(filename):
     # ffmpeg must be in path
+    # result in integer minutes
     command = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{filename}"'
     try:
         output = check_output(command, stderr=STDOUT).decode()
@@ -210,7 +211,7 @@ def import_imdb_data():
                     titles[f'{primary_title}-{year}'].add(tconst)
                     titles[f'{original_title}-{year}'].add(tconst)
 
-    os.remove(os.path.join(cachedir(), 'data.tsv'))
+    # os.remove(os.path.join(cachedir(), 'data.tsv'))
     with open(titles_index, 'wb') as f:
         pickle.dump(dict(titles), f)
 
@@ -235,7 +236,33 @@ def title_imdb_id(title, year=None):
     return titles_index().get(key.lower(), None)
 
 
-def get_title(name, movie):
+def retrieve_imdb_id(dirpath, barename) -> (str,str,list):
+    """
+    Return a list as they my be several movies with same name in IMDb date.
+    If an ID file exists, it has precedence over the ID possibly found in IMDb
+    data.
+    """
+    idfile = os.path.join(dirpath, barename + '.id')
+    if os.path.isfile(idfile):
+        with open(idfile) as f:
+            imdb_id = [f.readline()]
+    else:
+        imdb_id = None
+
+    if re.search(r'\(\d\d\d\d\)\s*$', barename):
+        match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
+        name = match.group(1).strip()
+        year = int(match.group(2))
+        imdb_id = imdb_id or title_imdb_id(name, year)
+    else:
+        name = barename.strip()
+        year = 9999
+        imdb_id = imdb_id or title_imdb_id(name)
+
+    return name, year, imdb_id
+
+
+def get_title(name, movie, strict_imdb=True):
     """
     name: title of movie as extracted from file name
     movie: movie object retrieved from imdb
@@ -246,8 +273,10 @@ def get_title(name, movie):
         return name
     elif movie.get('countries')[0] == 'France':
         return movie.get('original title')
-    else:
+    elif strict_imdb:
         return movie.get('title')
+    else:
+        return name
 
 
 def wikipedia_url(title, year):
@@ -326,7 +355,7 @@ def create_record(dirpath, filename, name, ia, imdb_id):
     # set imdb information
     movie = ia.get_movie(imdb_id[2:])
     record['imdb_id'] = movie.movieID
-    record['title'] = get_title(name, movie)
+    record['title'] = get_title(name, movie, strict_imdb=False)
     record['year'] = movie.get('year')
     record['runtime'] = movie.get('runtimes', ['0000'])[0]
     record['director'] = [_.get('name') for _ in movie.get('director', [])]
@@ -334,6 +363,7 @@ def create_record(dirpath, filename, name, ia, imdb_id):
 
     # set wikipedia url
     record['wikipedia_url'] = wikipedia_url(record['title'], record['year'])
+    record['wikipedia_url'] = wikipedia_url(get_title(name, movie, strict_imdb=True), record['year'])
 
     # load default movie cover
     imgname = os.path.splitext(fullname)[0] + '.jpg'
@@ -383,16 +413,7 @@ def create_missing_records(rep, forcejson=False):
                 continue
 
         new_movie_number += 1
-
-        if re.search(r'\(\d\d\d\d\)\s*$', barename):
-            match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
-            name = match.group(1).strip()
-            year = int(match.group(2))
-            imdb_id = title_imdb_id(name, year)
-        else:
-            name = barename.strip()
-            year = 9999
-            imdb_id = title_imdb_id(name)
+        name, year, imdb_id = retrieve_imdb_id(dirpath, barename)
 
         if imdb_id and len(imdb_id) > 1:
             print(name, 'ambiguous', imdb_id)
@@ -704,6 +725,51 @@ def purge_thumbnails(rep, records):
             os.remove(fullname)
 
 
+# -- Storyboards --------------------------------------------------------------
+
+
+def make_storyboard(record):
+    record['storyboard'] = record['barename'] + '.story.jpg'
+    if os.path.isfile(os.path.join(record['dirpath'], record['storyboard'])):
+        return
+
+    print('Making storyboard', record['storyboard'], '...', end='')
+    moviefullname = os.path.join(record['dirpath'], record['filename'])
+    duration = get_duration(moviefullname) * 60
+    step = duration // 17
+    imgname = os.path.join(cachedir(), 'img%02d.jpg')
+    
+    # very time consuming:
+    # command = 'ffmpeg -i "%s" -vf fps=1/%d %s' % (moviefullname, step, imgname)
+    # os.system(command)
+
+    command = 'ffmpeg -y -hide_banner -loglevel error -accurate_seek -ss %d -i "%s" -frames:v 1 %s'
+    for index in range(1, 17):
+        os.system(command % (index * step, moviefullname, imgname % index))
+
+    colnum = 4
+    imgwidth = 1280
+    margin = 10
+    thumbwidth = (1280 - (colnum + 1) * margin) // colnum
+    img = Image.open(os.path.join(cachedir(), 'img01.jpg'))
+    w, h = img.size
+    thumbheight = h * thumbwidth // w
+    imgheight = colnum * thumbheight + (colnum + 1) * margin
+    storyboard = Image.new('RGB', (imgwidth, imgheight), (0, 0, 0))
+
+    for index in range(16):
+        row = index // colnum
+        col = index % colnum
+        img = Image.open(imgname % (index + 1))
+        img = img.resize((thumbwidth, thumbheight), Image.Resampling.LANCZOS)
+        x = margin + col * (thumbwidth + margin)
+        y = margin + row * (thumbheight + margin)
+        storyboard.paste(img, (x, y))
+
+    storyboard.save(os.path.join(record['dirpath'], record['storyboard']))
+    print('done.')
+
+
 # -- Pass 4: make movie html files --------------------------------------------
 
 
@@ -784,6 +850,8 @@ def movie_record_html(rep, records, record, language, yearmovie_num, director_mo
                 relpaths = [relpath_to_movie(rep, records, record, _, yearmovie_num) for _ in movies]
                 record['path_to_castothermovies'].append(relpaths)
 
+    make_storyboard(record)
+
     html = template.render(
         title=record['title'],
         movie_link=record['filename'],
@@ -831,7 +899,10 @@ def make_movie_pages(rep, records, language):
             print(html, file=f)
 
 
-def make_html_pages(rep, language, forcethumb):
+# -- Hub ----------------------------------------------------------------------
+
+
+def make_all_pages(rep, language, forcethumb):
     langdict = None if language == 'EN' else lang_dict(language)
     def translate(string):
         return string if language == 'EN' else langdict[string]
@@ -845,7 +916,7 @@ def make_html_pages(rep, language, forcethumb):
     make_alpha_page(rep, records, language, forcethumb=False)
     make_actor_page(rep, records, language, forcethumb=False)
     make_stats_page(rep, records, language)
-    make_history_page(rep, language);
+    make_history_page(rep, language)
     make_movie_pages(rep, records, language)
     purge_thumbnails(rep, records)
     shutil.copy(installname('index.htm'), rep)
@@ -956,10 +1027,10 @@ def main():
     elif args.extract_data:
         create_missing_records(args.rep, args.force_json)
     elif args.make_pages:
-        make_html_pages(args.rep, args.language, args.force_thumb)
+        make_all_pages(args.rep, args.language, args.force_thumb)
     elif args.update:
         create_missing_records(args.rep, args.force_json)
-        make_html_pages(args.rep, args.language, args.force_thumb)
+        make_all_pages(args.rep, args.language, args.force_thumb)
     elif args.test:
         test(*args.test)
     else:

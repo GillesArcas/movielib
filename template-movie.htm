@@ -32,7 +32,7 @@ a.disabled {
 {% include 'menu.css' %}
 <script>
 function setcookie(movie, dates) {
-    document.cookie = `movielib-${movie}=${dates};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
+    document.cookie = `movielib-${movie}=${dates};samesite=lax;max-age=31536000;path=/`;
 }
 
 function getcookie(movie) {
@@ -44,7 +44,7 @@ function getcookie(movie) {
 }
 
 function set_history_status(value) {
-    document.cookie = `history_status=${value};samesite=lax;max-age=${Number.MAX_SAFE_INTEGER};path=/`;
+    document.cookie = `history_status=${value};samesite=lax;max-age=31536000;path=/`;
 }
 
 function date_iso_to_loc(dateiso) {
@@ -95,6 +95,11 @@ function add_date() {
 
 <div class="float-child" style="width: 240px;">
 <img src="{{record.cover|urlencode}}" width="200" alt="Cover" style="box-shadow: 1px 1px 5px 5px  #c0c0c0">
+<br>
+<br>
+<a href="{{record.storyboard|urlencode}}">
+<img src="{{record.storyboard|urlencode}}" width="200" alt="Cover" style="box-shadow: 1px 1px 5px 5px  #c0c0c0">
+</a>
 <br>
 <br>
 <br>
