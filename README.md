@@ -9,12 +9,13 @@ A simple movie collection organizer. No need to repeat the information you find 
 Several views on your collection is available:
 
 * Bulk view, compact, in the order of the storage directory,
-* alphabetical order,
+* sorted by title,
 * sorted by year,
 * sorted by directors,
 * sorted by actors,
 * statistics (currently dimensions and file size),
-* movie description, with main movie data and links inside collection between movies sharing directors or actors, and links to IMDb and Wikipedia.
+* history,
+* movie descriptions.
 
 
 |![Bulk view](image1.jpg)|![Sort by year](image2.jpg)|
@@ -22,12 +23,23 @@ Several views on your collection is available:
 |Bulk view | Sort by year|
 |![Alphabetical sort](image3.jpg)|![Sort by director](image4.jpg)|
 |Alphabetical sort | Sort by director|
-|![Statistics](image5.jpg)|![Movie description](image6.jpg)|
-|Statistics | Movie description|
+|![Statistics](image5.jpg)|![History](image8.jpg)|
+|Statistics | History|
+
+The movie description contains:
+
+*  the main basic movie data, 
+*  the lists of movies sharing directors or actors inside the collection, with links from movie to movie,
+* the links to IMDb and Wikipedia for the movie,
+* the links to Wikipedia for the directors and actors,
+* the link to the storyboard (a mosaic of snapshots from the movie),
+* the dates of viewing the movie and the button to add a new date.
+
+![Movie description](image6.jpg)
 
 ## Install
 
-Clone the github repository in som directory and launch the following command from this directory:
+Clone the github repository in some directory and launch the following command from this directory:
 
 `pip install .`
 
@@ -105,7 +117,7 @@ Just use `movielib --update`.
 
 Just use `movielib --update`.
 
-Note for developpers: in some rare cases, it is necessary to delete all json files to force a new generation. This can be the case when the content of the json files evolves and mus be updated. In that case, a not documented option enables to remove all json files. This option does not remove the json files without IMDB id. Check however if these files must be manually completed with the related addition information. 
+Note for developpers: in some rare cases, it is necessary to delete all json files to force a new generation. This can be the case when the content of the json files evolves and must be updated. In that case, a not documented option enables to remove all json files. This option does not remove the json files without IMDB id. Check however if these files must be manually completed with the related additional information. 
 
 
 
