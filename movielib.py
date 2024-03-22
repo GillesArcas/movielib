@@ -130,6 +130,10 @@ def space_thousands(n):
     return f'{n:,}'.replace(',', ' ')
 
 
+def urljoin(*pieces):
+    return os.path.join(*pieces).replace(os.sep, '/')
+
+
 # -- Language -----------------------------------------------------------------
 
 
@@ -738,7 +742,7 @@ def make_storyboard(record):
     duration = get_duration(moviefullname) * 60
     step = duration // 17
     imgname = os.path.join(cachedir(), 'img%02d.jpg')
-    
+
     # very time consuming:
     # command = 'ffmpeg -i "%s" -vf fps=1/%d %s' % (moviefullname, step, imgname)
     # os.system(command)
@@ -805,9 +809,12 @@ def relpath_to_icon(record):
 
 
 def relpath_to_movie(rep, records, record, yearmovie, yearmovie_num):
+    """
+    Relative path from movie to movie
+    """
     record_target = records[yearmovie_num[yearmovie]]
     path = os.path.relpath(record_target['dirpath'], start=rep)
-    return record['relpath_to_root'] + os.path.join(path, record_target['barename'] + '.htm')
+    return urljoin(record['relpath_to_root'], path, record_target['barename'] + '.htm')
 
 
 def movie_record_html(rep, records, record, language, yearmovie_num, director_movies, actor_movies, template):
@@ -920,7 +927,7 @@ def make_all_pages(rep, language, forcethumb):
     make_movie_pages(rep, records, language)
     purge_thumbnails(rep, records)
     shutil.copy(installname('index.htm'), rep)
-    for fn in ('menu.png', 'movies-icon.png', 'top-icon.png'):
+    for fn in ('menu.png', 'movies-icon.png', 'top-icon.png', 'history.js'):
         shutil.copy(installname(fn), os.path.join(rep, '.gallery'))
 
 

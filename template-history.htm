@@ -7,6 +7,7 @@
 <style>
 body {
   font: normal 14px Verdana, Arial, sans-serif;
+  display: none;
 }
 td {
   padding-left: 15px;
@@ -29,56 +30,42 @@ div.h2like {
 }
 </style>
 {% include 'menu.css' %}
+<script src="history.js"></script>
 <script>
-function cookiedict() {
-    const prefix = 'movielib-';
-    let movies_to_dates = {};
-    let cookies = document.cookie.split("; ");
-    for (const pair of cookies) {
-        let cookie = pair.split("=");
-        let key = cookie[0].trim();
-        if (key.startsWith(prefix))
-            movies_to_dates[key.substring(prefix.length)] = cookie[1];
-    }
-    return movies_to_dates;
-}
+function query_history_answer(params) {
+    // mode = store|retrieve
+    let mode = params.get('mode');
+    let back = params.get('back').replace(/\\'/g, "'");
+    let movie = params.get('movie');
+    let dates = localStorage.getItem(movie);
 
-function setcookie(movie, dates) {
-    document.cookie = `movielib-${movie}=${dates};samesite=lax;max-age=31536000;path=/`;
-}
+    if (mode == 'store') {
+        let today = new Date().toISOString().split('T')[0];
+        dates = (dates === null) ? today : (dates + ',' + today);
+        localStorage.setItem(movie, dates);
+        set_history_status(0);
+    } else if (mode == 'retrieve') {
+        // pass
+    } else
+        alert('Wrong mode');
 
-function remcookie(movie) {
-    document.cookie = `movielib-${movie}=;samesite=lax;max-age=0;path=/`;
-}
-
-function set_history_status(value) {
-    document.cookie = `history_status=${value};samesite=lax;max-age=31536000;path=/`;
-}
-
-function get_history_status() {
-    for (const pair of document.cookie.split("; ")) {
-        if (pair.startsWith('history_status'))
-            return pair.split("=")[1];
-    }
-    return null;
-}
-
-function date_iso_to_loc(dateiso) {
-    const options = {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    };
-    return new Date(dateiso).toLocaleDateString("fr-FR", options);
+    window.open(back + `?mode=back&history=${dates}`, "_self");
 }
 
 function onload() {
-    show_history();
+    const params = new URLSearchParams(window.location.search);
 
-    if (get_history_status() === '1')
-        document.getElementById("statusmsg").innerHTML = '';
-    else
-        document.getElementById("statusmsg").innerHTML = '&#9888 History not saved.';
+    if (params.get('mode') !== null) {
+        query_history_answer(params);
+    } else {
+        document.getElementsByTagName("body")[0].style.display = "block";
+        show_history();
+
+        if (get_history_status() === '1')
+            document.getElementById("statusmsg").innerHTML = '';
+        else
+            document.getElementById("statusmsg").innerHTML = '&#9888 History not saved.';
+    }
 }
 
 function sort_by_movie() {
@@ -93,48 +80,10 @@ function sort_by_date() {
 
 function show_history() {
     if (localStorage.getItem('show_by') == 'movie')
-        show_history_by_movie();
+        s = history_sorted_by_movie();
     else
-        show_history_by_date();
-}
-
-function show_history_by_movie() {
-    let s = '';
-    let movies_to_dates = cookiedict();
-    for (const movie of Object.keys(movies_to_dates).sort()) {
-        let datesloc = movies_to_dates[movie].split(',').map(dateiso => date_iso_to_loc(dateiso));
-        s += '<tr>' +
-             '<td class="dates">' + movie + '</td>' +
-             '<td class="dates">' + datesloc.join(',') + '</td>' +
-             '</tr>';
-    }
-    document.getElementById("content").innerHTML = s;
-}
-
-function show_history_by_date() {
-    let dates_to_movies = {};
-    let movies_to_dates = cookiedict();
-    for (const movie of Object.keys(movies_to_dates).sort()) {
-        let dates = movies_to_dates[movie].split(',');
-        for (const date of dates) {
-            if (!(date in dates_to_movies))
-                dates_to_movies[date] = [];
-            dates_to_movies[date].push(movie);
-        }
-    }
-
-    let s = '';
-    for (const dateiso of Object.keys(dates_to_movies).sort()) {
-        s += '<tr>' +
-             '<td>' + date_iso_to_loc(dateiso) + '</td>' +
-             '<td class="dates">' + dates_to_movies[dateiso][0] + '</td>' +
-             '</tr>';
-        for (const movie of dates_to_movies[dateiso].slice(1))
-            s += '<tr>' +
-                 '<td>' + '</td>' +
-                 '<td class="dates">' + movie + '</td>' +
-                 '</tr>';
-    }
+        s = history_sorted_by_date();
+        
     document.getElementById("content").innerHTML = s;
 }
 
@@ -149,44 +98,27 @@ function onClickRestore() {
 
 function restore_history(s) {
     // remove all movie cookies
-    let movies_to_dates = cookiedict();
-    for (const movie in movies_to_dates)
-        remcookie(movie);
+    localStorage.clear();
 
     // get new movie cookies
     movies_to_dates = {};
     let movie;
     for (const line of s.split(/\r?\n/)) {
         if (line.search(/\d\d\d\d-\d\d-\d\d/) < 0)
+            // line is a movie title
             movie = line.trim();
         else
+            // line is a date (or comma separated list of dates)
             movies_to_dates[movie] = line;
     }
 
     // set new movie cookies
-    for (const movie in movies_to_dates)
-        setcookie(movie, movies_to_dates[movie]);
+    for (const movie in movies_to_dates) {
+        localStorage.setItem(movie, movies_to_dates[movie]);
+    }
 
     location.reload();
     set_history_status(1);
-}
-
-function formatted_history_for_saving() {
-    let dates_to_movies = {};
-    let movies_to_dates = cookiedict();
-    for (const movie of Object.keys(movies_to_dates).sort()) {
-        let dates = movies_to_dates[movie].split(',');
-        for (const date of dates) {
-            if (!(date in dates_to_movies))
-                dates_to_movies[date] = [];
-            dates_to_movies[date].push(movie);
-        }
-    }
-    let list = [];
-    for (const dateiso of Object.keys(dates_to_movies).sort())
-        for (const movie of dates_to_movies[dateiso])
-            list.push(movie, dateiso);
-    return list.join('\n');
 }
 
 async function save_history_with_copy_paste() {
