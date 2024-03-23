@@ -14,15 +14,17 @@ function historyDict() {
 }
 
 function set_history_status(value) {
+    // value is 'saved' or 'modified'
     document.cookie = `history_status=${value};samesite=lax;max-age=31536000;path=/`;
 }
 
 function get_history_status() {
+    // return 'saved' or 'modified'
     for (const pair of document.cookie.split("; ")) {
         if (pair.startsWith('history_status'))
             return pair.split("=")[1];
     }
-    return null;
+    return 'saved';  // first utilisation or cookies have been reset
 }
 
 function date_iso_to_loc(dateiso) {

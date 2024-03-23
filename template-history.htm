@@ -43,7 +43,7 @@ function query_history_answer(params) {
         let today = new Date().toISOString().split('T')[0];
         dates = (dates === null) ? today : (dates + ',' + today);
         localStorage.setItem(movie, dates);
-        set_history_status(0);
+        set_history_status('modified');
     } else if (mode == 'retrieve') {
         // pass
     } else
@@ -61,7 +61,7 @@ function onload() {
         document.getElementsByTagName("body")[0].style.display = "block";
         show_history();
 
-        if (get_history_status() === '1')
+        if (get_history_status() === 'saved')
             document.getElementById("statusmsg").innerHTML = '';
         else
             document.getElementById("statusmsg").innerHTML = '&#9888 History not saved.';
@@ -83,7 +83,7 @@ function show_history() {
         s = history_sorted_by_movie();
     else
         s = history_sorted_by_date();
-        
+
     document.getElementById("content").innerHTML = s;
 }
 
@@ -118,20 +118,7 @@ function restore_history(s) {
     }
 
     location.reload();
-    set_history_status(1);
-}
-
-async function save_history_with_copy_paste() {
-    // not used
-    s = formatted_history_for_saving();
-    try {
-        await navigator.clipboard.writeText(s);
-        alert('Content copied to clipboard');
-        location.reload();
-        set_history_status(1);
-    } catch (err) {
-        alert('Failed to copy: ', err);
-    }
+    set_history_status('saved');
 }
 
 function download(content, mimeType, filename){
@@ -146,7 +133,7 @@ function download(content, mimeType, filename){
 function save_history_with_anchor_download() {
     // no feedback on user action, assume user confirms download
     s = formatted_history_for_saving();
-    set_history_status(1);
+    set_history_status('saved');
     location.reload();
     download(s, 'text/plain', 'history.txt');
 }

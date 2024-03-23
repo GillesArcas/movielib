@@ -1,14 +1,6 @@
 <script>
-function get_history_status() {
-    for (const pair of document.cookie.split("; ")) {
-        if (pair.startsWith('history_status'))
-            return pair.split("=")[1];
-    }
-    return null;
-}
-
 function on_mouse_enter() {
-    if (get_history_status() === '1')
+    if (get_history_status() === 'saved')
         document.getElementById("status").innerHTML = '';
     else
         document.getElementById("status").innerHTML = ' &#9888';
