@@ -571,7 +571,7 @@ def urlencode(url):
     return url
 
 
-def make_gallery_page(pagename, rep, records, language, forcethumb, index, sorted_records, tags, caption):
+def make_gallery_page(pagename, rep, records, language, forcethumb, index, sorted_records, tags, caption, search=False):
     file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
     env = jinja2.Environment(loader=file_loader)
     template = env.get_template(TEMPLATE_GALLERY)
@@ -582,6 +582,7 @@ def make_gallery_page(pagename, rep, records, language, forcethumb, index, sorte
         sorted_records=sorted_records,
         tags=tags,
         caption=caption,
+        search=search,
         path_to_gallery='',
         icon='movies-icon.png',
         language=language,
@@ -647,7 +648,18 @@ def make_director_page(rep, records, language, forcethumb):
             tags[director] = None
     index = list(sorted(first_director))
 
-    make_gallery_page(MOVIES_DIRECTOR, rep, records, language, forcethumb, index, movies_by_director, tags, True)
+    make_gallery_page(
+        MOVIES_DIRECTOR,
+        rep,
+        records,
+        language,
+        forcethumb,
+        index,
+        movies_by_director,
+        tags,
+        caption=True,
+        search=True
+    )
 
 
 def make_actor_page(rep, records, language, forcethumb):
@@ -667,7 +679,18 @@ def make_actor_page(rep, records, language, forcethumb):
             tags[actor] = None
     index = list(sorted(first_actor))
 
-    make_gallery_page(MOVIES_ACTOR, rep, records, language, forcethumb, index, movies_by_actor, tags, True)
+    make_gallery_page(
+        MOVIES_ACTOR,
+        rep,
+        records,
+        language,
+        forcethumb,
+        index,
+        movies_by_actor,
+        tags,
+        caption=True,
+        search=True
+    )
 
 
 def make_stats_page(rep, records, language):

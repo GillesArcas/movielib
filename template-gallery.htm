@@ -44,8 +44,42 @@ div.anchor {
   padding-top: 45px;
   margin-top: -45px;
 }
+#searchInput {
+  background-image: url('searchicon2.png'); /* Add a search icon to input */
+  background-position: 10px -1px; /* Position the search icon */
+  background-repeat: no-repeat; /* Do not repeat the icon image */
+  width: 30%;
+  height: 0px;
+  font-size: 16px; /* Increase font-size */
+  padding: 12px 20px 12px 40px; /* Add some padding */
+  //border: 1px solid #ddd; /* Add a grey border */
+  border: none; /* Add a grey border */
+}
+input:focus{
+    outline: none;
+}
 </style>
 {% include 'menu.css' %}
+{% if search %}
+<script>
+function searchFunction() {
+  const input = document.getElementById('searchInput');
+  const filter = input.value.toUpperCase();
+  const alldiv = document.getElementsByTagName("div");
+
+  for (let i = 0; i < alldiv.length; i++) {
+    let txtValue = alldiv[i].getAttribute("name");
+    if (txtValue) {
+        if (txtValue.toUpperCase().indexOf("@@@") == 0 && txtValue.toUpperCase().indexOf(filter) > -1) {
+          alldiv[i].style.display = "";
+        } else {
+          alldiv[i].style.display = "none";
+        }
+    }
+  }
+}
+</script>
+{% endif %}
 </head>
 
 <body>
@@ -58,6 +92,9 @@ div.anchor {
         {% for x in index %}
             <a style="display:inline-table;" href="#{{x}}">{{x}}</a>
         {% endfor %}
+        {% if search %}
+        <input type="text" id="searchInput" onkeyup="searchFunction()" placeholder="Search for names..">
+        {% endif %}
         </h2>
     </div>
     <br>
@@ -73,6 +110,7 @@ div.anchor {
         <div id="{{tags[key]}}" class="anchor"></div>
     {% endif %}
     {% if key %}
+        <div name="@@@{{key}}">
         <h2>{{key}} <img src="top-icon.png" style="float: right;" alt="Top" onclick="window.location.href='#top'" ></h2>
     {% endif %}
     {% for record in records %}
@@ -86,6 +124,9 @@ div.anchor {
         <p>{{record.year_title if caption else record.title}}</p>
         </div>
     {% endfor %}
+    {% if key %}
+        </div>
+    {% endif %}
 {% endfor %}
 
 </div>
