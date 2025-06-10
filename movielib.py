@@ -4,6 +4,7 @@
 """
 
 
+import sys
 import os
 import re
 import json
@@ -24,6 +25,7 @@ import requests
 from PIL import Image
 from imdb import Cinemagoer
 import jinja2
+from icecream import ic
 
 
 MOVIE_TSV = 'movie.tsv'
@@ -169,6 +171,7 @@ def translate_function(language):
 def cachedir():
     tempdir = tempfile.gettempdir()
     cache_dir = os.path.join(tempdir, 'movielib')
+    ic(cache_dir)
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
     return cache_dir
@@ -242,7 +245,7 @@ def title_imdb_id(title, year=None):
 
 def retrieve_imdb_id(dirpath, barename) -> (str,str,list):
     """
-    Return a list as they my be several movies with same name in IMDb date.
+    Return a list as they may be several movies with same name in IMDb date.
     If an ID file exists, it has precedence over the ID possibly found in IMDb
     data.
     """
@@ -363,7 +366,17 @@ def create_record(dirpath, filename, name, ia, imdb_id):
     record['year'] = movie.get('year')
     record['runtime'] = movie.get('runtimes', ['0000'])[0]
     record['director'] = [_.get('name') for _ in movie.get('director', [])]
-    record['cast'] = [_.get('name') for _ in movie.get('cast')]
+
+    # For some unknown reason (cast too long?), sometimes cast is not returned
+    # and the request has to be made again. Not satisfying but seems to work.
+    while 1:
+        cast = movie.get('cast')
+        if cast:
+            break
+        print('Retry getting cast...')
+        movie = ia.get_movie(imdb_id[2:])
+
+    record['cast'] = [_.get('name') for _ in cast]
 
     # set wikipedia url
     record['wikipedia_url'] = wikipedia_url(record['title'], record['year'])
@@ -402,6 +415,7 @@ def create_missing_records(rep, forcejson=False):
     movie_number = 0
     new_movie_number = 0
     movie_found = 0
+    warning = False
 
     for dirpath, filename, barename in movie_gen(rep):
         movie_number += 1
@@ -420,11 +434,16 @@ def create_missing_records(rep, forcejson=False):
         name, year, imdb_id = retrieve_imdb_id(dirpath, barename)
 
         if imdb_id and len(imdb_id) > 1:
+            print('-' * 40)
             print(name, 'ambiguous', imdb_id)
-            continue
-        elif imdb_id is None:
-            print(name, 'not found in imdb')
+            print('Find correct IMDB ID and make <barename>.id to disambiguate')
+            print('-' * 40)
             record = create_minimal_record(dirpath, filename, name, year)
+            warning = True
+        elif imdb_id is None:
+            ic(name, 'not found in imdb')
+            record = create_minimal_record(dirpath, filename, name, year)
+            warning = True
         else:
             # movie found
             imdb_id = list(imdb_id)[0]
@@ -448,6 +467,7 @@ def create_missing_records(rep, forcejson=False):
     print('movie_number', movie_number)
     print('new_movie_number', new_movie_number)
     print('movie_found', movie_found)
+    return warning
 
 
 # -- Pass 3: make gallery html files and thumbnails ---------------------------
@@ -490,12 +510,15 @@ def load_records(rep, forcethumb):
         jsonname = os.path.join(dirpath, barename + '.json')
         if os.path.isfile(jsonname) is False:
             print(jsonname, 'not found')
+            record = EMPTY.copy()
+            record['title'] = barename
+            record['year'] = 9999
         else:
             with open(jsonname) as f:
                 record = json.loads(f.read())
 
-            update_movie_record(rep, movienum, dirpath, filename, barename, record, forcethumb)
-            records.append(record)
+        update_movie_record(rep, movienum, dirpath, filename, barename, record, forcethumb)
+        records.append(record)
 
     titles_to_records = defaultdict(list)
     for record in records:
@@ -1052,19 +1075,25 @@ def parse_command_line():
 
 def main():
     parser, args = parse_command_line()
+    warning = False
     if args.import_imdb_data:
         import_imdb_data()
     elif args.extract_data:
-        create_missing_records(args.rep, args.force_json)
+        warning = create_missing_records(args.rep, args.force_json)
     elif args.make_pages:
         make_all_pages(args.rep, args.language, args.force_thumb)
     elif args.update:
-        create_missing_records(args.rep, args.force_json)
+        warning = create_missing_records(args.rep, args.force_json)
         make_all_pages(args.rep, args.language, args.force_thumb)
     elif args.test:
         test(*args.test)
     else:
         parser.print_help()
+
+    if not warning:
+        sys.exit(0)
+    else:
+        sys.exit(-1)
 
 
 if __name__ == '__main__':
