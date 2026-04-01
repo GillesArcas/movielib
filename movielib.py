@@ -24,6 +24,7 @@ from pathlib import Path
 import requests
 from PIL import Image
 from imdb import Cinemagoer
+import imdbinfo
 import jinja2
 from icecream import ic
 
@@ -164,6 +165,102 @@ def translate_function(language):
     return translate
 
 
+# -- IMDB access --------------------------------------------------------------
+
+
+# Adapters implemented after Cinemagoer stopped working. See for instance
+# https://github.com/cinemagoer/cinemagoer/issues/554
+
+
+class ImdbCinemagoerAdapter:
+    """Adapter for cinemagoer.
+    implemented but not tested as it does not work for the moment.
+    """
+
+    def __init__(self):
+        self.cinemagoer = Cinemagoer()
+
+    def get_movie(self, movie_id):
+        # get a movie by id
+        return self.cinemagoer.get_movie(movie_id)
+
+    def movie_id(self, movie):
+        return movie.movieID
+
+    def movie_year(self, movie):
+        return movie.get('year')
+
+    def movie_original_title(self, movie):
+        return movie.get('original title')
+
+    def movie_title(self, movie):
+        return movie.get('title')
+
+    def movie_countries(self, movie):
+        return movie.get('countries')
+
+    def movie_duration(self, movie):
+        return movie.get('runtimes', ['0000'])[0]
+
+    def movie_director_names(self, movie):
+        return [_.get('name') for _ in movie.get('director', [])]
+
+    def movie_cast_names(self, movie):
+        # For some unknown reason (cast too long?), sometimes cast is not returned
+        # and the request has to be made again. Not satisfying but seems to work.
+        while 1:
+            cast = movie.get('cast')
+            if cast:
+                break
+            print('Retry getting cast...')
+            imdb_id = movie.movieID
+            movie = self.cinemagoer.get_movie(imdb_id[2:])
+
+        return [_.get('name') for _ in cast]
+
+    def movie_cover_url(self, movie):
+        return movie.get('cover url')
+
+
+class ImdbImdbinfoAdapter:
+    """Adapter for imdbinfo.
+    """
+
+    def __init__(self):
+        pass
+
+    def get_movie(self, movie_id):
+        # get a movie by id
+        return imdbinfo.get_movie(movie_id)
+
+    def movie_id(self, movie):
+        return movie.imdb_id
+
+    def movie_year(self, movie):
+        return movie.year
+
+    def movie_original_title(self, movie):
+        return movie.title_localized
+
+    def movie_title(self, movie):
+        return movie.title
+
+    def movie_countries(self, movie):
+        return movie.countries
+
+    def movie_duration(self, movie):
+        return movie.duration
+
+    def movie_director_names(self, movie):
+        return [_.name for _ in movie.directors]
+
+    def movie_cast_names(self, movie):
+        return [_.name for _ in movie.categories["cast"]]
+
+    def movie_cover_url(self, movie):
+        return movie.cover_url
+
+
 # -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
 
 
@@ -269,19 +366,19 @@ def retrieve_imdb_id(dirpath, barename) -> (str,str,list):
     return name, year, imdb_id
 
 
-def get_title(name, movie, strict_imdb=True):
+def get_title(name, ia, movie, strict_imdb=True):
     """
     name: title of movie as extracted from file name
     movie: movie object retrieved from imdb
     """
-    if name == movie.get('title'):              # equals to primaryTitle from title.basics.tsv.gz
+    if name == ia.movie_title(movie):           # equals to primaryTitle from title.basics.tsv.gz
         return name
-    elif name ==  movie.get('original title'):  # equals to originalTitle from title.basics.tsv.gz
+    elif name == ia.movie_original_title(movie):  # equals to originalTitle from title.basics.tsv.gz
         return name
-    elif movie.get('countries')[0] == 'France':
-        return movie.get('original title')
+    elif ia.movie_countries(movie)[0] == 'France':
+        return ia.movie_original_title(movie)
     elif strict_imdb:
-        return movie.get('title')
+        return ia.movie_title(movie)
     else:
         return name
 
@@ -297,15 +394,22 @@ def wikipedia_url(title, year):
         f'https://fr.wikipedia.org/wiki/{title}',
     )
 
+    # it has become necessary to add a user agent
+    headers = {
+        'User-Agent': 'https://github.com/GillesArcas/movielib (gilles.arcas@gmail.com)'
+    }
+
     for url in urls:
         try:
-            r = requests.get(url, timeout=10)
+            r = requests.get(url, timeout=10, headers=headers)
         except requests.exceptions.ConnectionError:
             print('Wikipedia connection', 'FAILURE', 'for', title)
             continue
         except requests.exceptions.ReadTimeout:
             print('Wikipedia connection', 'TIMEOUT', 'for', title)
             continue
+        except Exception as e:
+            print(e)
         if r.status_code == 200:
             return url
 
@@ -361,31 +465,21 @@ def create_record(dirpath, filename, name, ia, imdb_id):
 
     # set imdb information
     movie = ia.get_movie(imdb_id[2:])
-    record['imdb_id'] = movie.movieID
-    record['title'] = get_title(name, movie, strict_imdb=False)
-    record['year'] = movie.get('year')
-    record['runtime'] = movie.get('runtimes', ['0000'])[0]
-    record['director'] = [_.get('name') for _ in movie.get('director', [])]
-
-    # For some unknown reason (cast too long?), sometimes cast is not returned
-    # and the request has to be made again. Not satisfying but seems to work.
-    while 1:
-        cast = movie.get('cast')
-        if cast:
-            break
-        print('Retry getting cast...')
-        movie = ia.get_movie(imdb_id[2:])
-
-    record['cast'] = [_.get('name') for _ in cast]
+    record['imdb_id'] = ia.movie_id(movie)
+    record['title'] = get_title(name, ia, movie, strict_imdb=False)
+    record['year'] = ia.movie_year(movie)
+    record['runtime'] = ia.movie_duration(movie)
+    record['runtime'] = ia.movie_duration(movie)
+    record['director'] = ia.movie_director_names(movie)
+    record['cast'] = ia.movie_cast_names(movie)
 
     # set wikipedia url
-    record['wikipedia_url'] = wikipedia_url(record['title'], record['year'])
-    record['wikipedia_url'] = wikipedia_url(get_title(name, movie, strict_imdb=True), record['year'])
+    record['wikipedia_url'] = wikipedia_url(get_title(name, ia, movie, strict_imdb=True), record['year'])
 
     # load default movie cover
     imgname = os.path.splitext(fullname)[0] + '.jpg'
     if os.path.isfile(imgname) is False:
-        imgdata = requests.get(movie.get('cover url'), timeout=10).content
+        imgdata = requests.get(ia.movie_cover_url(movie), timeout=10).content
         with open(imgname, 'wb') as handler:
             handler.write(imgdata)
 
@@ -411,7 +505,7 @@ def create_missing_records(rep, forcejson=False):
     forcejson enables to reset content (mainly for dev). Records without IMDB
     id are ignored as their content is assumed to be completed manually.
     """
-    ia = Cinemagoer()
+    ia = ImdbImdbinfoAdapter()
     movie_number = 0
     new_movie_number = 0
     movie_found = 0
@@ -451,7 +545,6 @@ def create_missing_records(rep, forcejson=False):
             record = create_record(dirpath, filename, name, ia, imdb_id)
 
         # save record
-        jsonname = os.path.join(dirpath, barename + '.json')
         with open(jsonname, 'w') as f:
             json.dump(record, f, indent=4)
 
@@ -504,7 +597,7 @@ def update_movie_record(rep, movienum, dirpath, filename, barename, record, forc
             print('Warning: no image for', os.path.join(dirpath, filename))
 
 
-def load_records(rep, forcethumb):
+def load_records(rep, forcethumb=False):
     records = []
     for movienum, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
         jsonname = os.path.join(dirpath, barename + '.json')
@@ -1002,23 +1095,21 @@ def list_extras(rep):
 
 
 def test_imdb(_):
-    # create an instance of the Cinemagoer class
-    ia = Cinemagoer()
+    # create an instance of the interface
+    # imdbinter = ImdbCinemagoerAdapter()
+    imdbinter = ImdbImdbinfoAdapter()
 
     # get a movie
-    movie = ia.get_movie('0133093')
-    # movies = ia.search_movie("C'est arrivé près de chez vous")
-    # movie = movies[0]
-    print(movie, movie.movieID)
-    print(movie.get('countries'))
-    print(movie.get('original title'))
-    print(movie.get('title'))
-    print(movie.infoset2keys)
-
-    # search for a person name
-    people = ia.search_person('Mel Gibson')
-    for person in people:
-        print(person.personID, person['name'])
+    movie = imdbinter.get_movie('0133093')
+    print(movie)
+    print(imdbinter.movie_id(movie))
+    print(imdbinter.movie_year(movie))
+    print(imdbinter.movie_countries(movie))
+    print(imdbinter.movie_original_title(movie))
+    print(imdbinter.movie_title(movie))
+    print(imdbinter.movie_duration(movie))
+    print(imdbinter.movie_director_names(movie))
+    print(imdbinter.movie_cast_names(movie))
 
 
 def stats_images(rep):
