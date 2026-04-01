@@ -21,6 +21,7 @@ from collections import defaultdict
 from functools import cache
 from pathlib import Path
 
+import platformdirs
 import requests
 from PIL import Image
 from imdb import Cinemagoer
@@ -29,6 +30,7 @@ import jinja2
 from icecream import ic
 
 
+APPNAME = 'movielib'
 MOVIE_TSV = 'movie.tsv'
 TITLES_INDEX = 'titlestsv.pickle'
 TEMPLATE_GALLERY = 'template-gallery.htm'
@@ -266,12 +268,9 @@ class ImdbImdbinfoAdapter:
 
 @cache
 def cachedir():
-    tempdir = tempfile.gettempdir()
-    cache_dir = os.path.join(tempdir, 'movielib')
-    ic(cache_dir)
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-    return cache_dir
+    directory = platformdirs.user_data_dir(APPNAME, appauthor=False, ensure_exists=True)
+    ic(directory)
+    return directory
 
 
 def import_imdb_data():
