@@ -14,7 +14,6 @@ import types
 import shutil
 import gzip
 import argparse
-import tempfile
 import glob
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
@@ -115,8 +114,11 @@ def get_duration(filename):
         output = check_output(command, stderr=STDOUT).decode()
         output = output.splitlines()[0]
         return int(float(output) / 60.0)
-    except CalledProcessError as e:
-        output = e.output.decode()
+    except CalledProcessError:
+        print('Error while reading duration', filename)
+        return 'undefined'
+    except ValueError:
+        print('Error while reading duration', filename)
         return 'undefined'
 
 
@@ -176,7 +178,7 @@ def translate_function(language):
 
 class ImdbCinemagoerAdapter:
     """Adapter for cinemagoer.
-    implemented but not tested as it does not work for the moment.
+    Implemented but not tested as it does not work for the moment (March 2026).
     """
 
     def __init__(self):
@@ -877,8 +879,13 @@ def make_storyboard(record):
 
     print('Making storyboard', record['storyboard'], '...', end='')
     moviefullname = os.path.join(record['dirpath'], record['filename'])
-    duration = get_duration(moviefullname) * 60
-    step = duration // 17
+    duration = record['runtime']
+    if duration == 'undefined':
+        # pas de durée définie, on prend 5 minutes au pif entre chaque image
+        step = 300
+    else:
+        # la durée stockée est en minutes, il faut en secondes
+        step = (duration * 60) // 17
     imgname = os.path.join(cachedir(), 'img%02d.jpg')
 
     # very time consuming:
@@ -887,26 +894,32 @@ def make_storyboard(record):
 
     command = 'ffmpeg -y -hide_banner -loglevel error -accurate_seek -ss %d -i "%s" -frames:v 1 %s'
     for index in range(1, 17):
-        os.system(command % (index * step, moviefullname, imgname % index))
+        try:
+            os.system(command % (index * step, moviefullname, imgname % index))
+        except:
+            # image non générée, on voit un vide dans le storyboard
+            pass
 
     colnum = 4
     imgwidth = 1280
     margin = 10
     thumbwidth = (1280 - (colnum + 1) * margin) // colnum
-    img = Image.open(os.path.join(cachedir(), 'img01.jpg'))
+    img = Image.open(imgname % 1)
     w, h = img.size
     thumbheight = h * thumbwidth // w
     imgheight = colnum * thumbheight + (colnum + 1) * margin
     storyboard = Image.new('RGB', (imgwidth, imgheight), (0, 0, 0))
 
     for index in range(16):
-        row = index // colnum
-        col = index % colnum
-        img = Image.open(imgname % (index + 1))
-        img = img.resize((thumbwidth, thumbheight), Image.Resampling.LANCZOS)
-        x = margin + col * (thumbwidth + margin)
-        y = margin + row * (thumbheight + margin)
-        storyboard.paste(img, (x, y))
+        if os.path.exists(imgname % (index + 1)):
+            row = index // colnum
+            col = index % colnum
+            img = Image.open(imgname % (index + 1))
+            img = img.resize((thumbwidth, thumbheight), Image.Resampling.LANCZOS)
+            x = margin + col * (thumbwidth + margin)
+            y = margin + row * (thumbheight + margin)
+            storyboard.paste(img, (x, y))
+            os.remove(imgname % (index + 1))
 
     storyboard.save(os.path.join(record['dirpath'], record['storyboard']))
     print('done.')
@@ -1048,10 +1061,6 @@ def make_movie_pages(rep, records, language):
 
 
 def make_all_pages(rep, language, forcethumb):
-    langdict = None if language == 'EN' else lang_dict(language)
-    def translate(string):
-        return string if language == 'EN' else langdict[string]
-
     os.makedirs(os.path.join(rep, '.gallery', '.thumbnails'), exist_ok=True)
     records = load_records(rep, forcethumb)
     load_main_cast(records)
