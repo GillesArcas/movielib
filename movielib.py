@@ -587,15 +587,18 @@ def update_movie_record(rep, movienum, dirpath, filename, barename, record, forc
     thumb_basename = thumbname(record['cover'], 'film')
     thumb_name = os.path.join(rep, '.gallery', '.thumbnails', thumb_basename)
 
-    if forcethumb or os.path.isfile(thumb_name) is False or time_ordered(image_name, thumb_name) is False:
-        if os.path.isfile(image_name):
-            width, height = Image.open(image_name).size
-            thumbsize = size_thumbnail(width, height, maxdim=300)
-            args = types.SimpleNamespace()
-            args.forcethumb = True
-            make_thumbnail_image(args, image_name, thumb_name, thumbsize)
-        else:
-            print('Warning: no image for', os.path.join(dirpath, filename))
+    if os.path.isfile(image_name):
+        if (forcethumb or                                   # all thumbnails to be generated
+            os.path.isfile(thumb_name) is False or          # thumbnail does not exist
+            time_ordered(image_name, thumb_name) is False   # cover is more recent
+            ):
+                width, height = Image.open(image_name).size
+                thumbsize = size_thumbnail(width, height, maxdim=300)
+                args = types.SimpleNamespace()
+                args.forcethumb = True
+                make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+    else:
+        print('Warning: no image for', os.path.join(dirpath, filename))
 
 
 def load_records(rep, forcethumb=False):
