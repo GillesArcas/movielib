@@ -372,7 +372,7 @@ def get_title(name, ia, movie, strict_imdb=True):
     name: title of movie as extracted from file name
     movie: movie object retrieved from imdb
     """
-    if name == ia.movie_title(movie):           # equals to primaryTitle from title.basics.tsv.gz
+    if name == ia.movie_title(movie):             # equals to primaryTitle from title.basics.tsv.gz
         return name
     elif name == ia.movie_original_title(movie):  # equals to originalTitle from title.basics.tsv.gz
         return name
@@ -417,7 +417,7 @@ def wikipedia_url(title, year):
     return None
 
 
-EMPTY = {
+EMPTY_RECORD = {
     'imdb_id': None,
     'title': None,
     'year': None,
@@ -432,7 +432,7 @@ EMPTY = {
 
 
 def create_minimal_record(dirpath, filename, name, year):
-    record = EMPTY.copy()
+    record = EMPTY_RECORD.copy()
     fullname = os.path.join(dirpath, filename)
 
     # set title and year found in filename
@@ -453,7 +453,7 @@ def create_minimal_record(dirpath, filename, name, year):
 
 
 def create_record(dirpath, filename, name, ia, imdb_id):
-    record = EMPTY.copy()
+    record = EMPTY_RECORD.copy()
     fullname = os.path.join(dirpath, filename)
 
     # set size
@@ -476,6 +476,8 @@ def create_record(dirpath, filename, name, ia, imdb_id):
 
     # set wikipedia url
     record['wikipedia_url'] = wikipedia_url(get_title(name, ia, movie, strict_imdb=True), record['year'])
+    if record['wikipedia_url'] is None:
+        record['wikipedia_url'] = wikipedia_url(record['title'], record['year'])
 
     # load default movie cover
     imgname = os.path.splitext(fullname)[0] + '.jpg'
@@ -591,12 +593,12 @@ def update_movie_record(rep, movienum, dirpath, filename, barename, record, forc
         if (forcethumb or                                   # all thumbnails to be generated
             os.path.isfile(thumb_name) is False or          # thumbnail does not exist
             time_ordered(image_name, thumb_name) is False   # cover is more recent
-            ):
-                width, height = Image.open(image_name).size
-                thumbsize = size_thumbnail(width, height, maxdim=300)
-                args = types.SimpleNamespace()
-                args.forcethumb = True
-                make_thumbnail_image(args, image_name, thumb_name, thumbsize)
+        ):
+            width, height = Image.open(image_name).size
+            thumbsize = size_thumbnail(width, height, maxdim=300)
+            args = types.SimpleNamespace()
+            args.forcethumb = True
+            make_thumbnail_image(args, image_name, thumb_name, thumbsize)
     else:
         print('Warning: no image for', os.path.join(dirpath, filename))
 
@@ -607,7 +609,7 @@ def load_records(rep, forcethumb=False):
         jsonname = os.path.join(dirpath, barename + '.json')
         if os.path.isfile(jsonname) is False:
             print(jsonname, 'not found')
-            record = EMPTY.copy()
+            record = EMPTY_RECORD.copy()
             record['title'] = barename
             record['year'] = 9999
         else:
