@@ -6,6 +6,7 @@ Sort by director        Tri par metteur en scène
 Sort by actor           Tri par acteur
 Statistics              Statistiques
 Play                    Visionner
+Show on TMDB            Voir sur TMDB
 Show on IMDB            Voir sur IMDB
 Show on Wikipedia       Voir sur Wikipedia
 Search on Google        Chercher sur Google

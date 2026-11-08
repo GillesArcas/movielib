@@ -9,23 +9,23 @@ import os
 import re
 import json
 import pprint
-import pickle
 import types
 import shutil
-import gzip
 import argparse
 import glob
+import time
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
+import functools
 
 import platformdirs
 import requests
 from PIL import Image
-from imdb import Cinemagoer
-import imdbinfo
+import tmdbsimple as tmdb
 import jinja2
+import keyring
 from icecream import ic
 
 
@@ -48,6 +48,27 @@ TRANSLATIONS = 'translations.txt'
 
 # -- Helpers ------------------------------------------------------------------
 
+
+def tracer(func):
+  @functools.wraps(func)
+  def wrapper(*args, **kwargs):
+    # Construction de la représentation des arguments
+    args_repr = [repr(a) for a in args]
+    kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
+    signature = ", ".join(args_repr + kwargs_repr)
+
+    print(f"[TRACE] Entrée : {func.__name__}({signature})")
+
+    try:
+      # Exécution de la fonction décorée
+      resultat = func(*args, **kwargs)
+      print(f"[TRACE] Sortie : {func.__name__} -> {resultat!r}")
+      return resultat
+    except Exception as e:
+      print(f"[TRACE] Exception dans {func.__name__} : {e!r}")
+      raise
+
+  return wrapper
 
 def thumbname(name, key):
     return key + '-' + name + '.jpg'
@@ -141,6 +162,13 @@ def urljoin(*pieces):
     return os.path.join(*pieces).replace(os.sep, '/')
 
 
+@cache
+def cachedir():
+    directory = platformdirs.user_data_dir(APPNAME, appauthor=False, ensure_exists=True)
+    ic(directory)
+    return directory
+
+
 # -- Language -----------------------------------------------------------------
 
 
@@ -169,176 +197,184 @@ def translate_function(language):
     return translate
 
 
-# -- IMDB access --------------------------------------------------------------
+# -- TMDB access --------------------------------------------------------------
 
 
-# Adapters implemented after Cinemagoer stopped working. See for instance
-# https://github.com/cinemagoer/cinemagoer/issues/554
-
-
-class ImdbCinemagoerAdapter:
-    """Adapter for cinemagoer.
-    Implemented but not tested as it does not work for the moment (March 2026).
+class TmdbSimpleAdapter():
+    """Adapter for tmdbsimple.
+    https://github.com/celiao/tmdbsimple
     """
 
     def __init__(self):
-        self.cinemagoer = Cinemagoer()
+        tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+        if tmdb.API_KEY is None:
+            print('Declare TMDb API key with movielib --apikey <apikey>')
+            sys.exit(1)
+        tmdb.REQUESTS_TIMEOUT = 5
 
     def get_movie(self, movie_id):
         # get a movie by id
-        return self.cinemagoer.get_movie(movie_id)
+        movie = tmdb.Movies(movie_id)
+        _ = movie.info()
+        return movie
 
     def movie_id(self, movie):
-        return movie.movieID
+        return movie.id
+
+    def movie_imdb_id(self, movie):
+        details = movie.info()
+        return details.get("imdb_id")
 
     def movie_year(self, movie):
-        return movie.get('year')
+        return movie.release_date[:4]
 
     def movie_original_title(self, movie):
-        return movie.get('original title')
-
-    def movie_title(self, movie):
-        return movie.get('title')
-
-    def movie_countries(self, movie):
-        return movie.get('countries')
-
-    def movie_duration(self, movie):
-        return movie.get('runtimes', ['0000'])[0]
-
-    def movie_director_names(self, movie):
-        return [_.get('name') for _ in movie.get('director', [])]
-
-    def movie_cast_names(self, movie):
-        # For some unknown reason (cast too long?), sometimes cast is not returned
-        # and the request has to be made again. Not satisfying but seems to work.
-        while 1:
-            cast = movie.get('cast')
-            if cast:
-                break
-            print('Retry getting cast...')
-            imdb_id = movie.movieID
-            movie = self.cinemagoer.get_movie(imdb_id[2:])
-
-        return [_.get('name') for _ in cast]
-
-    def movie_cover_url(self, movie):
-        return movie.get('cover url')
-
-
-class ImdbImdbinfoAdapter:
-    """Adapter for imdbinfo.
-    """
-
-    def __init__(self):
-        pass
-
-    def get_movie(self, movie_id):
-        # get a movie by id
-        return imdbinfo.get_movie(movie_id)
-
-    def movie_id(self, movie):
-        return movie.imdb_id
-
-    def movie_year(self, movie):
-        return movie.year
-
-    def movie_original_title(self, movie):
-        return movie.title_localized
+        return movie.original_title
 
     def movie_title(self, movie):
         return movie.title
 
     def movie_countries(self, movie):
-        return movie.countries
+        return movie.origin_country
 
     def movie_duration(self, movie):
-        return movie.duration
+        return movie.runtime
 
     def movie_director_names(self, movie):
-        return [_.name for _ in movie.directors]
+        movie = tmdb.Movies(movie.id)
+        response = movie.credits()
+        return [crew_member['name'] for crew_member in movie.crew if crew_member['job'] == 'Director']
 
     def movie_cast_names(self, movie):
-        return [_.name for _ in movie.categories["cast"]]
+        movie = tmdb.Movies(movie.id)
+        response = movie.credits()
+        return [cast_member['name'] for cast_member in movie.cast]
 
     def movie_cover_url(self, movie):
-        return movie.cover_url
+        poster_path = movie.poster_path
+        if poster_path:
+            # URL de base pour les images de TMDb (la taille peut être ajustée : 'w500', 'original', etc.)
+            base_image_url = "https://image.tmdb.org/t/p/w500"
+
+            poster_url = f"{base_image_url}{poster_path}"
+            return poster_url
+        else:
+            return None
+
+    def get_title(self, name, movie, strict_imdb=True):
+        """
+        name: title of movie as extracted from file name
+        movie: movie object retrieved from tmdb
+        """
+        if name == self.movie_title(movie):             
+            return name
+        elif name == self.movie_original_title(movie):  
+            return name
+        elif self.movie_countries(movie) and self.movie_countries(movie)[0] == 'France':
+            return self.movie_original_title(movie)
+        elif strict_imdb:
+            return self.movie_title(movie)
+        else:
+            return name
 
 
-# -- Pass 1: extract data from title.basics.tsv.gz ----------------------------
+def store_tmdb_apikey(apikey):
+    keyring.set_password('movielib', 'Gilles', apikey)
 
 
-@cache
-def cachedir():
-    directory = platformdirs.user_data_dir(APPNAME, appauthor=False, ensure_exists=True)
-    ic(directory)
-    return directory
+# -- Pass 1: make json records and download default movie cover if required ---
 
 
-def import_imdb_data():
-    titles_gz = os.path.join(cachedir(), 'title.basics.tsv.gz')
-    data_tsv = os.path.join(cachedir(), 'data.tsv')
-    movie_tsv = os.path.join(cachedir(), MOVIE_TSV)
-    titles_index = os.path.join(cachedir(), TITLES_INDEX)
+# @tracer
+def compare_titles(title, movie, search_type):
+    title = title.lower()
 
-    print('Downloading data from IMDB')
-    data = requests.get('https://datasets.imdbws.com/title.basics.tsv.gz', timeout=10).content
-    with open(titles_gz, 'wb') as handler:
-        handler.write(data)
-    print('Downloaded')
+    # list of titles associated with movie
+    title_list = []
+    movie_title = movie["title"].lower()
+    original_title = movie["original_title"].lower()
 
-    print('Extracting data')
-    with gzip.open(titles_gz, 'rb') as f_in:
-        with open(data_tsv, 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-    print('Extracted')
+    title_list.append(movie["title"].lower())
+    title_list.append(movie["original_title"].lower())
 
-    titles = defaultdict(set)
-    with open(data_tsv, encoding='utf-8') as f:
-        with open(movie_tsv, 'wt', encoding='utf-8') as g:
-            print(f.readline(), end='', file=g)
-            for line in f:
-                if '\tmovie\t' in line:
-                    print(line, end='', file=g)
-                    tconst, _, primary_title, original_title, _, year, _, _, _ = line.split('\t')
+    movie_id = movie["id"]
+    movie_details = tmdb.Movies(movie_id)
+    # ic(movie_details.alternative_titles())
+    for desc in movie_details.alternative_titles()['titles']:
+        if desc['iso_3166_1'] in ('US',):
+            title_list.append(desc['title'].lower())
 
-                    primary_title = primary_title.lower()
-                    primary_title = primary_title.replace(':', '')
-                    primary_title = primary_title.replace('.', '')
-                    primary_title = primary_title.replace('  ', ' ')
-                    original_title = original_title.lower()
-                    original_title = original_title.replace(':', '')
-                    original_title = original_title.replace('.', '')
-                    original_title = original_title.replace('  ', ' ')
+    for index, title_ in enumerate(title_list):
+        title_list[index] = re.sub('[:.]', '', title_)
+        title_list[index] = title_list[index].replace('  ', ' ')
 
-                    titles[primary_title].add(tconst)
-                    titles[original_title].add(tconst)
-                    titles[f'{primary_title}-{year}'].add(tconst)
-                    titles[f'{original_title}-{year}'].add(tconst)
+    # ic(title)
+    # ic(title_list)
+    # ic(title in title_list)
 
-    # os.remove(os.path.join(cachedir(), 'data.tsv'))
-    with open(titles_index, 'wb') as f:
-        pickle.dump(dict(titles), f)
+    if title in title_list:
+        return True
+
+    if search_type == 'phrase':
+        return False
+
+    movie_title = movie_title.replace(':', '')
+    movie_title = movie_title.replace('.', '')
+    original_title = original_title.replace(':', '')
+    original_title = original_title.replace('.', '')
+
+    return movie_title == title or original_title == title
 
 
-@cache
-def titles_index():
-    if os.path.isfile(os.path.join(cachedir(), TITLES_INDEX)) is False:
-        import_imdb_data()
+# @tracer
+def get_tmdb_id(title: str, original_year: str, search_type='phrase', fullname=None) -> list:
+    # ic(search_type)
+    # ic(fullname)
+    # breakpoint()
+    # ic(title, repr(original_year))
+    if search_type == 'phrase' and fullname:
+        idfilename = os.path.splitext(fullname)[0] + '.id'
+        # ic(idfilename)
+        if os.path.isfile(idfilename):
+            with open(idfilename) as f:
+                movie_id = f.read().strip()
+                return [movie_id]
 
-    print('Loading titles index...')
-    with open(os.path.join(cachedir(), TITLES_INDEX), 'rb') as f:
-        titles = pickle.load(f)
-    print('Loaded')
-    return titles
+    search = tmdb.Search()
+    search.movie(query=title, search_type=search_type, language="us-US")
+    # ic(search.results)
 
+    movie_ids = []
 
-# -- Pass 2: make json records and download default movie cover if required ---
+    for movie in search.results:
+        if compare_titles(title, movie, search_type) is False:
+            continue
 
+        if not original_year:
+            movie_ids.append(movie["id"])
+            continue
 
-def title_imdb_id(title, year=None):
-    key = title if (year is None) else f'{title}-{year}'
-    return titles_index().get(key.lower(), None)
+        movie_details = tmdb.Movies(movie["id"])
+        releases = movie_details.release_dates()
+
+        dates = []
+
+        for country in releases.get("results", []):
+            for release in country.get("release_dates", []):
+                date = release.get("release_date", "")
+                if date:
+                    dates.append(date[:10])
+
+        # ic(min(dates), original_year, dates and min(dates)[:4] == original_year)
+        if dates and min(dates)[:4] == original_year:
+            movie_ids.append(movie["id"])
+
+    if movie_ids:
+        return movie_ids
+    elif search_type == 'phrase':
+        return get_tmdb_id(title, original_year, search_type='ngram')
+    else:
+        return []
 
 
 def retrieve_imdb_id(dirpath, barename) -> (str,str,list):
@@ -357,34 +393,20 @@ def retrieve_imdb_id(dirpath, barename) -> (str,str,list):
     if re.search(r'\(\d\d\d\d\)\s*$', barename):
         match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
         name = match.group(1).strip()
-        year = int(match.group(2))
-        imdb_id = imdb_id or title_imdb_id(name, year)
+        year = match.group(2)
+        imdb_id = imdb_id or get_tmdb_id(name, year)
     else:
         name = barename.strip()
-        year = 9999
-        imdb_id = imdb_id or title_imdb_id(name)
+        year = 'undefined'
+        imdb_id = imdb_id or get_tmdb_id(name, year)
 
     return name, year, imdb_id
 
 
-def get_title(name, ia, movie, strict_imdb=True):
-    """
-    name: title of movie as extracted from file name
-    movie: movie object retrieved from imdb
-    """
-    if name == ia.movie_title(movie):             # equals to primaryTitle from title.basics.tsv.gz
-        return name
-    elif name == ia.movie_original_title(movie):  # equals to originalTitle from title.basics.tsv.gz
-        return name
-    elif ia.movie_countries(movie)[0] == 'France':
-        return ia.movie_original_title(movie)
-    elif strict_imdb:
-        return ia.movie_title(movie)
-    else:
-        return name
-
-
 def wikipedia_url(title, year):
+    if title is None:
+        return None
+
     title = title.replace(' ', '_')
     urls = (
         f'https://en.wikipedia.org/wiki/{title}_({year}_film)',
@@ -418,6 +440,7 @@ def wikipedia_url(title, year):
 
 
 EMPTY_RECORD = {
+    'tmdb_id': None,
     'imdb_id': None,
     'title': None,
     'year': None,
@@ -448,43 +471,41 @@ def create_minimal_record(dirpath, filename, name, year):
     record['height'] = height
 
     # set duration
-    record['runtime'] = get_duration(fullname)
+    record['runtime'] = get_duration(fullname) # TODO int ?
     return record
 
 
-def create_record(dirpath, filename, name, ia, imdb_id):
-    record = EMPTY_RECORD.copy()
-    fullname = os.path.join(dirpath, filename)
+def create_record(dirpath, filename, name, year, ia, imdb_id):
+    record = create_minimal_record(dirpath, filename, name, year)
 
-    # set size
-    record['filesize'] = os.path.getsize(fullname)
+    movie = ia.get_movie(imdb_id)
+    if movie is None:
+        print('Error: Unabled to retrieve information from imdb:', imdb_id)
+        return
 
-    # set dimensions
-    width, height = get_dimensions(fullname)
-    record['width'] = width
-    record['height'] = height
-
-    # set imdb information
-    movie = ia.get_movie(imdb_id[2:])
-    record['imdb_id'] = ia.movie_id(movie)
-    record['title'] = get_title(name, ia, movie, strict_imdb=False)
+    # set movie information
+    record['tmdb_id'] = ia.movie_id(movie)
+    record['imdb_id'] = ia.movie_imdb_id(movie)
+    record['title'] = ia.get_title(name, movie, strict_imdb=False)
     record['year'] = ia.movie_year(movie)
-    record['runtime'] = ia.movie_duration(movie)
-    record['runtime'] = ia.movie_duration(movie)
+    record['runtime'] = ia.movie_duration(movie)  # TODO int ?
     record['director'] = ia.movie_director_names(movie)
     record['cast'] = ia.movie_cast_names(movie)
 
     # set wikipedia url
-    record['wikipedia_url'] = wikipedia_url(get_title(name, ia, movie, strict_imdb=True), record['year'])
+    record['wikipedia_url'] = wikipedia_url(ia.get_title(name, movie, strict_imdb=True), record['year'])
     if record['wikipedia_url'] is None:
         record['wikipedia_url'] = wikipedia_url(record['title'], record['year'])
 
     # load default movie cover
+    fullname = os.path.join(dirpath, filename)
     imgname = os.path.splitext(fullname)[0] + '.jpg'
     if os.path.isfile(imgname) is False:
-        imgdata = requests.get(ia.movie_cover_url(movie), timeout=10).content
-        with open(imgname, 'wb') as handler:
-            handler.write(imgdata)
+        cover_url = ia.movie_cover_url(movie)
+        if cover_url:
+            imgdata = requests.get(cover_url, timeout=10).content
+            with open(imgname, 'wb') as handler:
+                handler.write(imgdata)
 
     return record
 
@@ -503,12 +524,13 @@ def movie_gen(rep):
 def create_missing_records(rep, forcejson=False):
     """
     Find recursively all movies in rep. Create json file (with same name as
-    movie) if absent. Fill record with imdb data if imdb id can be found, plus
+    movie) if absent. Fill record with tmdb data if tmdb id can be found, plus
     data relative to file.
-    forcejson enables to reset content (mainly for dev). Records without IMDB
+    forcejson enables to reset content (mainly for dev). Records without TMDB
     id are ignored as their content is assumed to be completed manually.
     """
-    ia = ImdbImdbinfoAdapter()
+    ia = TmdbSimpleAdapter()
+
     movie_number = 0
     new_movie_number = 0
     movie_found = 0
@@ -522,30 +544,37 @@ def create_missing_records(rep, forcejson=False):
             if forcejson:
                 with open(jsonname, encoding='utf-8') as f:
                     record = json.loads(f.read())
-                if record['imdb_id'] is None:
-                    continue
+                # TODO check
+                #if record['imdb_id'] is None:
+                #    continue
             else:
                 continue
 
         new_movie_number += 1
         name, year, imdb_id = retrieve_imdb_id(dirpath, barename)
 
-        if imdb_id and len(imdb_id) > 1:
+        if len(imdb_id) == 0:
+            ic(name, 'not found')
+            record = create_minimal_record(dirpath, filename, name, year)
+            warning = True
+        elif imdb_id and len(imdb_id) > 1:
             print('-' * 40)
             print(name, 'ambiguous', imdb_id)
-            print('Find correct IMDB ID and make <barename>.id to disambiguate')
+            print('Find correct TMDB ID and make <barename>.id to disambiguate')
             print('-' * 40)
             record = create_minimal_record(dirpath, filename, name, year)
             warning = True
         elif imdb_id is None:
-            ic(name, 'not found in imdb')
+            # TODO
+            assert 0
+            ic(name, 'not found')
             record = create_minimal_record(dirpath, filename, name, year)
             warning = True
         else:
             # movie found
             imdb_id = list(imdb_id)[0]
             movie_found += 1
-            record = create_record(dirpath, filename, name, ia, imdb_id)
+            record = create_record(dirpath, filename, name, year, ia, imdb_id)
 
         # save record
         with open(jsonname, 'w') as f:
@@ -559,6 +588,8 @@ def create_missing_records(rep, forcejson=False):
 
         pprint.pprint(record)
         print()
+        # sys.exit(1)
+        time.sleep(0.25)
 
     print('movie_number', movie_number)
     print('new_movie_number', new_movie_number)
@@ -566,7 +597,7 @@ def create_missing_records(rep, forcejson=False):
     return warning
 
 
-# -- Pass 3: make gallery html files and thumbnails ---------------------------
+# -- Pass 2: make gallery html files and thumbnails ---------------------------
 
 
 def update_movie_record(rep, movienum, dirpath, filename, barename, record, forcethumb=False):
@@ -611,7 +642,7 @@ def load_records(rep, forcethumb=False):
             print(jsonname, 'not found')
             record = EMPTY_RECORD.copy()
             record['title'] = barename
-            record['year'] = 9999
+            record['year'] = 'undefined'
         else:
             with open(jsonname) as f:
                 record = json.loads(f.read())
@@ -724,7 +755,16 @@ def make_vrac_page(rep, records, language, forcethumb):
 def make_year_page(rep, records, language, forcethumb):
     movies_by_year = defaultdict(list)
     for record in records:
-        movies_by_year[record['year']].append(record)
+        if record['year'] is not None:
+            if record['year'] == 'undefined':
+                pass
+            elif record['year'] == '':
+                ic(record['year'], record['title'])
+                pass
+            elif isinstance(record['year'], str):
+                movies_by_year[int(record['year'])].append(record)
+            else:
+                assert 0, repr(record['year']) + ' ' + record['title']
 
     first_year_in_decade = {}
     tags = {}
@@ -933,9 +973,17 @@ def make_storyboard(record):
 # -- Pass 4: make movie html files --------------------------------------------
 
 
+def tmdb_link(record):
+    if record['tmdb_id']:
+        url = 'https://www.themoviedb.org/movie/%s/' % record['tmdb_id']
+        return f'href="javascript:window.open(\'{url}\', \'_top\')"'
+    else:
+        return 'class="disabled"'
+
+
 def imdb_link(record):
     if record['imdb_id']:
-        url = 'https://www.imdb.com/title/tt%s/' % record['imdb_id']
+        url = 'https://www.imdb.com/title/tt%s/' % record['imdb_id'][2:]
         return f'href="javascript:window.open(\'{url}\', \'_top\')"'
     else:
         return 'class="disabled"'
@@ -1015,9 +1063,11 @@ def movie_record_html(rep, records, record, language, yearmovie_num, director_mo
 
     make_storyboard(record)
 
+    # ic(record)
     html = template.render(
         title=record['title'],
         movie_link=record['filename'],
+        tmdb_link=tmdb_link(record),
         imdb_link=imdb_link(record),
         wikipedia_link=wikipedia_link(record),
         google_link=google_link(record),
@@ -1055,6 +1105,8 @@ def make_movie_pages(rep, records, language):
     template = env.get_template(TEMPLATE_MOVIE)
 
     for record in records:
+        #if record['imdb_id'] is not None:
+        #    continue
         html = movie_record_html(rep, records, record, language, yearmovie_num, director_movies, actor_movies, template)
         html_basename = record['barename'] + '.htm'
         html_name = os.path.join(record['dirpath'], html_basename)
@@ -1086,7 +1138,9 @@ def make_all_pages(rep, language, forcethumb):
 # -- Test functions -----------------------------------------------------------
 
 
-def clean_json(rep):
+def clean_json(rep, _):
+    """Remove all json files in rep
+    """
     for dirpath, _, barename in movie_gen(rep):
         jsonname = os.path.join(dirpath, barename + '.json')
         imgname = os.path.join(dirpath, barename + '.jpg')
@@ -1095,37 +1149,123 @@ def clean_json(rep):
             os.remove(jsonname)
 
 
-def list_extras(rep):
+def list_extras(rep, _):
     for dirpath, movie, barename in movie_gen(rep):
         movie = os.path.join(dirpath, movie)
         json = os.path.join(dirpath, barename + '.json')
         html = os.path.join(dirpath, barename + '.htm')
         img = os.path.join(dirpath, barename + '.jpg')
         srt = os.path.join(dirpath, barename + '.srt')
+        story = os.path.join(dirpath, barename + '.story.jpg')
         for filename in glob.glob(os.path.join(dirpath, '*.*')):
-            if filename not in (movie, json, html, img, srt):
+            if filename not in (movie, json, html, img, srt, story):
                 print(filename)
 
 
-def test_imdb(_):
-    # create an instance of the interface
-    # imdbinter = ImdbCinemagoerAdapter()
-    imdbinter = ImdbImdbinfoAdapter()
+def test_tmdb(*_):
+    # movie = tmdb.Movies(603)
+    # response = movie.info()
+    # print(movie.title)
+    tmdbinter = TmdbSimpleAdapter()
+    movie = tmdbinter.get_movie('603')
+    print(tmdbinter.movie_id(movie))
+    print(tmdbinter.movie_year(movie))
+    print(tmdbinter.movie_countries(movie))
+    print(tmdbinter.movie_original_title(movie))
+    print(tmdbinter.movie_title(movie))
+    print(tmdbinter.movie_duration(movie))
+    print(tmdbinter.movie_director_names(movie))
+    print(tmdbinter.movie_cast_names(movie))
+    print(tmdbinter.movie_cover_url(movie))
 
-    # get a movie
-    movie = imdbinter.get_movie('0133093')
-    print(movie)
-    print(imdbinter.movie_id(movie))
-    print(imdbinter.movie_year(movie))
-    print(imdbinter.movie_countries(movie))
-    print(imdbinter.movie_original_title(movie))
-    print(imdbinter.movie_title(movie))
-    print(imdbinter.movie_duration(movie))
-    print(imdbinter.movie_director_names(movie))
-    print(imdbinter.movie_cast_names(movie))
+
+def test_search(titre, _):
+    titre = "12 Monkeys"
+    year = '1995'
+    fullname = None
+    print('Searching for', repr(titre), repr(year))
+
+    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    search = tmdb.Search()
+
+    # Lancement de la requête
+    result = search.movie(query=titre, search_type='phrase', language="us-US")
+    # response = search.movie(query=titre) # , language="fr-FR")
+
+    # ic(result)
+    # ic(search.results)
+    for movie in search.results:
+        title_fr = movie["title"]
+        title_orig = movie["original_title"]
+        movie_id = movie["id"]
+        release_year = movie.get("release_date", "")[:4]
+
+        print(f"ID : {movie_id} | Titre FR : {title_fr} | Titre Orig : {title_orig} ({release_year})")
+        mov = tmdb.Movies(movie_id)
+        # ic(mov.alternative_titles())
+
+    print('get_tmdb_id', get_tmdb_id(titre, year, fullname=fullname))
 
 
-def stats_images(rep):
+def test_title(titre, _):
+    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    titre = "Alien Vs Predator"
+    year = '2004'
+    movie_id = get_tmdb_id(titre, year)[0]
+
+    movie = tmdb.Movies(movie_id)
+    details = movie.info()
+    print("Titre :", details["title"])
+    print("Titre original :", details["original_title"])
+    print("Synopsis :", details["overview"])
+    print("Date de sortie :", details["release_date"])
+
+
+def test_search_(titre, _):
+    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    titre = "A Cure for Wellness"
+    year = '2016'
+    movie_id = get_tmdb_id(titre, year)[0]
+
+    movie = tmdb.Movies(movie_id)
+    details = movie.info()
+    print("Titre :", details["title"])
+    print("Titre original :", details["original_title"])
+    print("Synopsis :", details["overview"])
+    print("Date de sortie :", details["release_date"])
+
+
+def test_search_all(rep, _):
+    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    count = 0
+    found = 0
+    for index, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
+        count += 1
+        if re.search(r'\(\d\d\d\d\)\s*$', barename):
+            match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
+            name = match.group(1).strip()
+            year = match.group(2)
+        else:
+            name = barename.strip()
+            year = ''
+
+        movie_ids = get_tmdb_id(name, year, fullname=os.path.join(dirpath, filename))
+        # ic(name, year, movie_id)
+
+        if len(movie_ids) == 1:
+            found +=1
+            print('%-10s' % 'Found', name, year, movie_ids[0])
+        elif len(movie_ids) == 0:
+            print('%-10s' % 'Not found', name, year)
+        else:
+            print('%-10s' % 'Ambiguous', name, year)
+        if count == 1000:
+            break
+        time.sleep(0.25)
+    print(count, found)
+
+
+def stats_images(rep, _):
     records = load_records(rep)
     ratios = []
     for record in records:
@@ -1137,7 +1277,7 @@ def stats_images(rep):
     print('Mean image ratio', sum(ratios) / len(ratios))
 
 
-def stats_cast(rep):
+def stats_cast(rep, _):
     records = load_records(rep)
     movies_by_actor = defaultdict(list)
     for record in records:
@@ -1148,8 +1288,15 @@ def stats_cast(rep):
         print(actor, sorted(ranks))
 
 
-def test(funcname, rep):
-    globals()[funcname](rep)
+def list_not_found(rep, _):
+    records = load_records(rep)
+    for record in records:
+        if not record['imdb_id']:
+            print(record['title'])
+
+
+def test(funcname, rep, imdbapi):
+    globals()[funcname](rep, imdbapi)
 
 
 # -- Main ---------------------------------------------------------------------
@@ -1158,11 +1305,12 @@ def test(funcname, rep):
 def parse_command_line():
     parser = argparse.ArgumentParser(add_help=True, usage=__doc__)
     xgroup = parser.add_mutually_exclusive_group()
-    xgroup.add_argument('--import_imdb_data', action='store_true', default=False)
     xgroup.add_argument('--extract_data', action='store', metavar='<movies rep>', help=argparse.SUPPRESS)
     xgroup.add_argument('--make_pages', action='store', metavar='<movies rep>', help=argparse.SUPPRESS)
     xgroup.add_argument('--update', action='store', metavar='<movies rep>')
     xgroup.add_argument('--test', action='store', nargs=2, help=argparse.SUPPRESS)
+    xgroup.add_argument('--apikey', action='store', default=None, help='Store secretly TMDb API key')
+    parser.add_argument('--imdbapi', action='store', choices=['imdbinfo', 'cinemagoer', 'tmdbsimple'], default='tmdbsimple')
     parser.add_argument('--language', action='store', choices=lang_choices(), default='EN')
     parser.add_argument('--force_json', action='store_true', default=False, help=argparse.SUPPRESS)
     parser.add_argument('--force_thumb', action='store_true', default=False, help=argparse.SUPPRESS)
@@ -1180,17 +1328,17 @@ def parse_command_line():
 def main():
     parser, args = parse_command_line()
     warning = False
-    if args.import_imdb_data:
-        import_imdb_data()
-    elif args.extract_data:
+    if args.extract_data:
         warning = create_missing_records(args.rep, args.force_json)
     elif args.make_pages:
         make_all_pages(args.rep, args.language, args.force_thumb)
     elif args.update:
         warning = create_missing_records(args.rep, args.force_json)
         make_all_pages(args.rep, args.language, args.force_thumb)
+    elif args.apikey:
+        store_tmdb_apikey(args.apikey)
     elif args.test:
-        test(*args.test)
+        test(*args.test, args.imdbapi)
     else:
         parser.print_help()
 
