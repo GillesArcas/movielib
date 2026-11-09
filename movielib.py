@@ -1,6 +1,5 @@
 """
 > movielib --update <movies rep>
-> movielib --import_imdb_data
 """
 
 
@@ -18,7 +17,6 @@ from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
-import functools
 
 import platformdirs
 import requests
@@ -30,8 +28,6 @@ from icecream import ic
 
 
 APPNAME = 'movielib'
-MOVIE_TSV = 'movie.tsv'
-TITLES_INDEX = 'titlestsv.pickle'
 TEMPLATE_GALLERY = 'template-gallery.htm'
 TEMPLATE_STATS = 'template-stats.htm'
 TEMPLATE_HISTORY = 'template-history.htm'
@@ -48,27 +44,6 @@ TRANSLATIONS = 'translations.txt'
 
 # -- Helpers ------------------------------------------------------------------
 
-
-def tracer(func):
-  @functools.wraps(func)
-  def wrapper(*args, **kwargs):
-    # Construction de la représentation des arguments
-    args_repr = [repr(a) for a in args]
-    kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
-    signature = ", ".join(args_repr + kwargs_repr)
-
-    print(f"[TRACE] Entrée : {func.__name__}({signature})")
-
-    try:
-      # Exécution de la fonction décorée
-      resultat = func(*args, **kwargs)
-      print(f"[TRACE] Sortie : {func.__name__} -> {resultat!r}")
-      return resultat
-    except Exception as e:
-      print(f"[TRACE] Exception dans {func.__name__} : {e!r}")
-      raise
-
-  return wrapper
 
 def thumbname(name, key):
     return key + '-' + name + '.jpg'
@@ -377,30 +352,30 @@ def get_tmdb_id(title: str, original_year: str, search_type='phrase', fullname=N
         return []
 
 
-def retrieve_imdb_id(dirpath, barename) -> (str,str,list):
+def retrieve_movie_id(dirpath, barename) -> (str,str,list):
     """
-    Return a list as they may be several movies with same name in IMDb date.
-    If an ID file exists, it has precedence over the ID possibly found in IMDb
+    Return a list as they may be several movies with same name in TMDb data.
+    If an ID file exists, it has precedence over the ID possibly found in TMDb
     data.
     """
     idfile = os.path.join(dirpath, barename + '.id')
     if os.path.isfile(idfile):
         with open(idfile) as f:
-            imdb_id = [f.readline()]
+            tmdb_id = [f.readline()]
     else:
-        imdb_id = None
+        tmdb_id = None
 
     if re.search(r'\(\d\d\d\d\)\s*$', barename):
         match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
         name = match.group(1).strip()
         year = match.group(2)
-        imdb_id = imdb_id or get_tmdb_id(name, year)
+        tmdb_id = tmdb_id or get_tmdb_id(name, year)
     else:
         name = barename.strip()
         year = 'undefined'
-        imdb_id = imdb_id or get_tmdb_id(name, year)
+        tmdb_id = tmdb_id or get_tmdb_id(name, year)
 
-    return name, year, imdb_id
+    return name, year, tmdb_id
 
 
 def wikipedia_url(title, year):
@@ -475,12 +450,12 @@ def create_minimal_record(dirpath, filename, name, year):
     return record
 
 
-def create_record(dirpath, filename, name, year, ia, imdb_id):
+def create_record(dirpath, filename, name, year, ia, tmdb_id):
     record = create_minimal_record(dirpath, filename, name, year)
 
-    movie = ia.get_movie(imdb_id)
+    movie = ia.get_movie(tmdb_id)
     if movie is None:
-        print('Error: Unabled to retrieve information from imdb:', imdb_id)
+        print('Error: Unabled to retrieve information from tmdb:', tmdb_id)
         return
 
     # set movie information
@@ -545,26 +520,26 @@ def create_missing_records(rep, forcejson=False):
                 with open(jsonname, encoding='utf-8') as f:
                     record = json.loads(f.read())
                 # TODO check
-                #if record['imdb_id'] is None:
+                #if record['tmdb_id'] is None:
                 #    continue
             else:
                 continue
 
         new_movie_number += 1
-        name, year, imdb_id = retrieve_imdb_id(dirpath, barename)
+        name, year, tmdb_id = retrieve_movie_id(dirpath, barename)
 
-        if len(imdb_id) == 0:
+        if len(tmdb_id) == 0:
             ic(name, 'not found')
             record = create_minimal_record(dirpath, filename, name, year)
             warning = True
-        elif imdb_id and len(imdb_id) > 1:
+        elif tmdb_id and len(tmdb_id) > 1:
             print('-' * 40)
-            print(name, 'ambiguous', imdb_id)
+            print(name, 'ambiguous', tmdb_id)
             print('Find correct TMDB ID and make <barename>.id to disambiguate')
             print('-' * 40)
             record = create_minimal_record(dirpath, filename, name, year)
             warning = True
-        elif imdb_id is None:
+        elif tmdb_id is None:
             # TODO
             assert 0
             ic(name, 'not found')
@@ -572,9 +547,9 @@ def create_missing_records(rep, forcejson=False):
             warning = True
         else:
             # movie found
-            imdb_id = list(imdb_id)[0]
+            tmdb_id = list(tmdb_id)[0]
             movie_found += 1
-            record = create_record(dirpath, filename, name, year, ia, imdb_id)
+            record = create_record(dirpath, filename, name, year, ia, tmdb_id)
 
         # save record
         with open(jsonname, 'w') as f:
@@ -1105,7 +1080,7 @@ def make_movie_pages(rep, records, language):
     template = env.get_template(TEMPLATE_MOVIE)
 
     for record in records:
-        #if record['imdb_id'] is not None:
+        #if record['tmdb_id'] is not None:
         #    continue
         html = movie_record_html(rep, records, record, language, yearmovie_num, director_movies, actor_movies, template)
         html_basename = record['barename'] + '.htm'
@@ -1138,7 +1113,7 @@ def make_all_pages(rep, language, forcethumb):
 # -- Test functions -----------------------------------------------------------
 
 
-def clean_json(rep, _):
+def clean_json(rep):
     """Remove all json files in rep
     """
     for dirpath, _, barename in movie_gen(rep):
@@ -1149,7 +1124,7 @@ def clean_json(rep, _):
             os.remove(jsonname)
 
 
-def list_extras(rep, _):
+def list_extras(rep):
     for dirpath, movie, barename in movie_gen(rep):
         movie = os.path.join(dirpath, movie)
         json = os.path.join(dirpath, barename + '.json')
@@ -1179,7 +1154,7 @@ def test_tmdb(*_):
     print(tmdbinter.movie_cover_url(movie))
 
 
-def test_search(titre, _):
+def test_search(titre):
     titre = "12 Monkeys"
     year = '1995'
     fullname = None
@@ -1207,7 +1182,7 @@ def test_search(titre, _):
     print('get_tmdb_id', get_tmdb_id(titre, year, fullname=fullname))
 
 
-def test_title(titre, _):
+def test_title(titre):
     tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
     titre = "Alien Vs Predator"
     year = '2004'
@@ -1221,21 +1196,7 @@ def test_title(titre, _):
     print("Date de sortie :", details["release_date"])
 
 
-def test_search_(titre, _):
-    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
-    titre = "A Cure for Wellness"
-    year = '2016'
-    movie_id = get_tmdb_id(titre, year)[0]
-
-    movie = tmdb.Movies(movie_id)
-    details = movie.info()
-    print("Titre :", details["title"])
-    print("Titre original :", details["original_title"])
-    print("Synopsis :", details["overview"])
-    print("Date de sortie :", details["release_date"])
-
-
-def test_search_all(rep, _):
+def test_search_all(rep):
     tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
     count = 0
     found = 0
@@ -1265,7 +1226,7 @@ def test_search_all(rep, _):
     print(count, found)
 
 
-def stats_images(rep, _):
+def stats_images(rep):
     records = load_records(rep)
     ratios = []
     for record in records:
@@ -1277,7 +1238,7 @@ def stats_images(rep, _):
     print('Mean image ratio', sum(ratios) / len(ratios))
 
 
-def stats_cast(rep, _):
+def stats_cast(rep):
     records = load_records(rep)
     movies_by_actor = defaultdict(list)
     for record in records:
@@ -1288,15 +1249,15 @@ def stats_cast(rep, _):
         print(actor, sorted(ranks))
 
 
-def list_not_found(rep, _):
+def list_not_found(rep):
     records = load_records(rep)
     for record in records:
-        if not record['imdb_id']:
+        if not record['tmdb_id']:
             print(record['title'])
 
 
-def test(funcname, rep, imdbapi):
-    globals()[funcname](rep, imdbapi)
+def test(funcname, rep):
+    globals()[funcname](rep)
 
 
 # -- Main ---------------------------------------------------------------------
@@ -1310,7 +1271,6 @@ def parse_command_line():
     xgroup.add_argument('--update', action='store', metavar='<movies rep>')
     xgroup.add_argument('--test', action='store', nargs=2, help=argparse.SUPPRESS)
     xgroup.add_argument('--apikey', action='store', default=None, help='Store secretly TMDb API key')
-    parser.add_argument('--imdbapi', action='store', choices=['imdbinfo', 'cinemagoer', 'tmdbsimple'], default='tmdbsimple')
     parser.add_argument('--language', action='store', choices=lang_choices(), default='EN')
     parser.add_argument('--force_json', action='store_true', default=False, help=argparse.SUPPRESS)
     parser.add_argument('--force_thumb', action='store_true', default=False, help=argparse.SUPPRESS)
@@ -1338,7 +1298,7 @@ def main():
     elif args.apikey:
         store_tmdb_apikey(args.apikey)
     elif args.test:
-        test(*args.test, args.imdbapi)
+        test(*args.test)
     else:
         parser.print_help()
 
