@@ -13,6 +13,7 @@ import shutil
 import argparse
 import glob
 import time
+import filecmp
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 from functools import cache
@@ -217,13 +218,15 @@ class TmdbSimpleAdapter():
 
     def movie_director_names(self, movie):
         movie = tmdb.Movies(movie.id)
-        response = movie.credits()
-        return [crew_member['name'] for crew_member in movie.crew if crew_member['job'] == 'Director']
+        info = movie.credits()
+        crew = info.get('crew', [])
+        return [crew_member['name'] for crew_member in crew if crew_member['job'] == 'Director']
 
     def movie_cast_names(self, movie):
         movie = tmdb.Movies(movie.id)
-        response = movie.credits()
-        return [cast_member['name'] for cast_member in movie.cast]
+        info = movie.credits()
+        cast = info.get('cast', [])
+        return [cast_member['name'] for cast_member in cast]
 
     def movie_cover_url(self, movie):
         poster_path = movie.poster_path
@@ -241,9 +244,9 @@ class TmdbSimpleAdapter():
         name: title of movie as extracted from file name
         movie: movie object retrieved from tmdb
         """
-        if name == self.movie_title(movie):             
+        if name == self.movie_title(movie):
             return name
-        elif name == self.movie_original_title(movie):  
+        elif name == self.movie_original_title(movie):
             return name
         elif self.movie_countries(movie) and self.movie_countries(movie)[0] == 'France':
             return self.movie_original_title(movie)
@@ -260,7 +263,6 @@ def store_tmdb_apikey(apikey):
 # -- Pass 1: make json records and download default movie cover if required ---
 
 
-# @tracer
 def compare_titles(title, movie, search_type):
     title = title.lower()
 
@@ -274,7 +276,6 @@ def compare_titles(title, movie, search_type):
 
     movie_id = movie["id"]
     movie_details = tmdb.Movies(movie_id)
-    # ic(movie_details.alternative_titles())
     for desc in movie_details.alternative_titles()['titles']:
         if desc['iso_3166_1'] in ('US',):
             title_list.append(desc['title'].lower())
@@ -301,27 +302,21 @@ def compare_titles(title, movie, search_type):
     return movie_title == title or original_title == title
 
 
-# @tracer
 def get_tmdb_id(title: str, original_year: str, search_type='phrase', fullname=None) -> list:
-    # ic(search_type)
-    # ic(fullname)
-    # breakpoint()
-    # ic(title, repr(original_year))
     if search_type == 'phrase' and fullname:
         idfilename = os.path.splitext(fullname)[0] + '.id'
-        # ic(idfilename)
         if os.path.isfile(idfilename):
             with open(idfilename) as f:
                 movie_id = f.read().strip()
                 return [movie_id]
 
     search = tmdb.Search()
-    search.movie(query=title, search_type=search_type, language="us-US")
-    # ic(search.results)
+    info = search.movie(query=title, search_type=search_type, language="us-US")
+    search_results = info.get('results', [])
 
     movie_ids = []
 
-    for movie in search.results:
+    for movie in search_results:
         if compare_titles(title, movie, search_type) is False:
             continue
 
@@ -340,7 +335,6 @@ def get_tmdb_id(title: str, original_year: str, search_type='phrase', fullname=N
                 if date:
                     dates.append(date[:10])
 
-        # ic(min(dates), original_year, dates and min(dates)[:4] == original_year)
         if dates and min(dates)[:4] == original_year:
             movie_ids.append(movie["id"])
 
@@ -1110,7 +1104,58 @@ def make_all_pages(rep, language, forcethumb):
         shutil.copy(installname(fn), os.path.join(rep, '.gallery'))
 
 
-# -- Test functions -----------------------------------------------------------
+# -- Regression testing -------------------------------------------------------
+
+
+def regression_testing(rep):
+    """
+    rename gallery pages to .bak
+    rename N first movie json and html files to .bak
+    apply update
+    compare bak and new files
+    when no difference between two files, remove bak file
+    """
+    N = 10
+    files = [
+        'movies-vrac.htm',
+        'movies-year.htm',
+        'movies-alpha.htm',
+        'movies-director.htm',
+        'movies-actor.htm',
+        'movies-stats.htm',
+        'movies-history.htm',
+    ]
+    files = [os.path.join(rep, '.gallery', _) for _ in files]
+    for index, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
+        if index == N:
+            break
+        files.append(os.path.join(dirpath, barename + '.htm'))
+        files.append(os.path.join(dirpath, barename + '.json'))
+
+    # rename to .bak
+    for file_ in files:
+        os.rename(file_, file_ + '.bak')
+
+    # update
+    warning = create_missing_records(rep)
+    make_all_pages(rep, language='FR', forcethumb=False)
+
+    # compare
+    ndiff = 0
+    for file_ in files:
+        if filecmp.cmp(file_, file_ + '.bak', shallow=False):
+            os.remove(file_ + '.bak')
+        else:
+            ndiff += 1
+            print('Files are different', file_)
+
+    if ndiff == 0:
+        print('Regression testing: no difference found.')
+    else:
+        print(f'Regression testing: found {ndiff} different files.')
+
+
+# -- Maintenance functions (call with --test)----------------------------------
 
 
 def clean_json(rep):
@@ -1125,6 +1170,8 @@ def clean_json(rep):
 
 
 def list_extras(rep):
+    """List files in rep not in expected files
+    """
     for dirpath, movie, barename in movie_gen(rep):
         movie = os.path.join(dirpath, movie)
         json = os.path.join(dirpath, barename + '.json')
@@ -1135,95 +1182,6 @@ def list_extras(rep):
         for filename in glob.glob(os.path.join(dirpath, '*.*')):
             if filename not in (movie, json, html, img, srt, story):
                 print(filename)
-
-
-def test_tmdb(*_):
-    # movie = tmdb.Movies(603)
-    # response = movie.info()
-    # print(movie.title)
-    tmdbinter = TmdbSimpleAdapter()
-    movie = tmdbinter.get_movie('603')
-    print(tmdbinter.movie_id(movie))
-    print(tmdbinter.movie_year(movie))
-    print(tmdbinter.movie_countries(movie))
-    print(tmdbinter.movie_original_title(movie))
-    print(tmdbinter.movie_title(movie))
-    print(tmdbinter.movie_duration(movie))
-    print(tmdbinter.movie_director_names(movie))
-    print(tmdbinter.movie_cast_names(movie))
-    print(tmdbinter.movie_cover_url(movie))
-
-
-def test_search(titre):
-    titre = "12 Monkeys"
-    year = '1995'
-    fullname = None
-    print('Searching for', repr(titre), repr(year))
-
-    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
-    search = tmdb.Search()
-
-    # Lancement de la requête
-    result = search.movie(query=titre, search_type='phrase', language="us-US")
-    # response = search.movie(query=titre) # , language="fr-FR")
-
-    # ic(result)
-    # ic(search.results)
-    for movie in search.results:
-        title_fr = movie["title"]
-        title_orig = movie["original_title"]
-        movie_id = movie["id"]
-        release_year = movie.get("release_date", "")[:4]
-
-        print(f"ID : {movie_id} | Titre FR : {title_fr} | Titre Orig : {title_orig} ({release_year})")
-        mov = tmdb.Movies(movie_id)
-        # ic(mov.alternative_titles())
-
-    print('get_tmdb_id', get_tmdb_id(titre, year, fullname=fullname))
-
-
-def test_title(titre):
-    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
-    titre = "Alien Vs Predator"
-    year = '2004'
-    movie_id = get_tmdb_id(titre, year)[0]
-
-    movie = tmdb.Movies(movie_id)
-    details = movie.info()
-    print("Titre :", details["title"])
-    print("Titre original :", details["original_title"])
-    print("Synopsis :", details["overview"])
-    print("Date de sortie :", details["release_date"])
-
-
-def test_search_all(rep):
-    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
-    count = 0
-    found = 0
-    for index, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
-        count += 1
-        if re.search(r'\(\d\d\d\d\)\s*$', barename):
-            match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
-            name = match.group(1).strip()
-            year = match.group(2)
-        else:
-            name = barename.strip()
-            year = ''
-
-        movie_ids = get_tmdb_id(name, year, fullname=os.path.join(dirpath, filename))
-        # ic(name, year, movie_id)
-
-        if len(movie_ids) == 1:
-            found +=1
-            print('%-10s' % 'Found', name, year, movie_ids[0])
-        elif len(movie_ids) == 0:
-            print('%-10s' % 'Not found', name, year)
-        else:
-            print('%-10s' % 'Ambiguous', name, year)
-        if count == 1000:
-            break
-        time.sleep(0.25)
-    print(count, found)
 
 
 def stats_images(rep):
@@ -1254,6 +1212,93 @@ def list_not_found(rep):
     for record in records:
         if not record['tmdb_id']:
             print(record['title'])
+
+
+# -- Test functions -----------------------------------------------------------
+
+
+def test_tmdb(*_):
+    # movie = tmdb.Movies(603)
+    # response = movie.info()
+    # print(movie.title)
+    tmdbinter = TmdbSimpleAdapter()
+    movie = tmdbinter.get_movie('603')
+    print(tmdbinter.movie_id(movie))
+    print(tmdbinter.movie_year(movie))
+    print(tmdbinter.movie_countries(movie))
+    print(tmdbinter.movie_original_title(movie))
+    print(tmdbinter.movie_title(movie))
+    print(tmdbinter.movie_duration(movie))
+    print(tmdbinter.movie_director_names(movie))
+    print(tmdbinter.movie_cast_names(movie))
+    print(tmdbinter.movie_cover_url(movie))
+
+
+def test_search(titre):
+    titre = "12 Monkeys"
+    year = '1995'
+    fullname = None
+    print('Searching for', repr(titre), repr(year))
+
+    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    search = tmdb.Search()
+
+    # Lancement de la requête
+    info = search.movie(query=titre, search_type='phrase', language="us-US")
+    search_results = info.get('results', [])
+
+    for movie in search_results:
+        title_fr = movie["title"]
+        title_orig = movie["original_title"]
+        movie_id = movie["id"]
+        release_year = movie.get("release_date", "")[:4]
+
+        print(f"ID : {movie_id} | Titre FR : {title_fr} | Titre Orig : {title_orig} ({release_year})")
+
+    print('get_tmdb_id', get_tmdb_id(titre, year, fullname=fullname))
+
+
+def test_title(titre):
+    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    titre = "Alien Vs Predator"
+    year = '2004'
+    movie_id = get_tmdb_id(titre, year)[0]
+
+    movie = tmdb.Movies(movie_id)
+    details = movie.info()
+    print("Titre :", details["title"])
+    print("Titre original :", details["original_title"])
+    print("Synopsis :", details["overview"])
+    print("Date de sortie :", details["release_date"])
+
+
+def test_search_all(rep):
+    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    count = 0
+    found = 0
+    for dirpath, filename, barename in movie_gen(rep):
+        count += 1
+        if re.search(r'\(\d\d\d\d\)\s*$', barename):
+            match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
+            name = match.group(1).strip()
+            year = match.group(2)
+        else:
+            name = barename.strip()
+            year = ''
+
+        movie_ids = get_tmdb_id(name, year, fullname=os.path.join(dirpath, filename))
+
+        if len(movie_ids) == 1:
+            found +=1
+            print('%-10s' % 'Found', name, year, movie_ids[0])
+        elif len(movie_ids) == 0:
+            print('%-10s' % 'Not found', name, year)
+        else:
+            print('%-10s' % 'Ambiguous', name, year)
+        if count == 1000:
+            break
+        time.sleep(0.25)
+    print(count, found)
 
 
 def test(funcname, rep):
