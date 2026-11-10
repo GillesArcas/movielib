@@ -13,6 +13,7 @@ import argparse
 import glob
 import time
 import filecmp
+import getpass
 from subprocess import check_output, CalledProcessError, STDOUT
 from collections import defaultdict
 from functools import cache
@@ -181,7 +182,7 @@ class TmdbSimpleAdapter():
     """
 
     def __init__(self):
-        tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+        tmdb.API_KEY = keyring.get_password('movielib', getpass.getuser())
         if tmdb.API_KEY is None:
             print('Declare TMDb API key with movielib --apikey <apikey>')
             sys.exit(1)
@@ -221,7 +222,7 @@ class TmdbSimpleAdapter():
         movie = tmdb.Movies(movie.id)
         info = movie.credits()
         crew = info.get('crew', [])
-        return [crew_member['name'] for crew_member in crew if crew_member['job'] == 'Director']
+        return sorted([crew_member['name'] for crew_member in crew if crew_member['job'] == 'Director'])
 
     def movie_cast_names(self, movie):
         movie = tmdb.Movies(movie.id)
@@ -258,7 +259,9 @@ class TmdbSimpleAdapter():
 
 
 def store_tmdb_apikey(apikey):
-    keyring.set_password('movielib', 'Gilles', apikey)
+    user = getpass.getuser()
+    keyring.set_password('movielib', user, apikey)
+    print('API key stored for current user', user)
 
 
 # -- Pass 1: make json records and download default movie cover if required ---
@@ -1219,7 +1222,7 @@ def test_search(titre):
     fullname = None
     print('Searching for', repr(titre), repr(year))
 
-    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    tmdb.API_KEY = keyring.get_password('movielib', getpass.getuser())
     search = tmdb.Search()
 
     # Lancement de la requête
@@ -1238,7 +1241,7 @@ def test_search(titre):
 
 
 def test_title(titre):
-    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    tmdb.API_KEY = keyring.get_password('movielib', getpass.getuser())
     titre = "Alien Vs Predator"
     year = '2004'
     movie_id = get_tmdb_id(titre, year)[0]
@@ -1252,7 +1255,7 @@ def test_title(titre):
 
 
 def test_search_all(rep):
-    tmdb.API_KEY = keyring.get_password('movielib', 'Gilles')
+    tmdb.API_KEY = keyring.get_password('movielib', getpass.getuser())
     count = 0
     found = 0
     for dirpath, filename, barename in movie_gen(rep):
