@@ -7,7 +7,6 @@ import sys
 import os
 import re
 import json
-import pprint
 import types
 import shutil
 import argparse
@@ -105,7 +104,7 @@ def get_dimensions(filename):
 
 def get_duration(filename):
     # ffmpeg must be in path
-    # result in integer minutes
+    # result in integer minutes, or 'undefined'
     command = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{filename}"'
     try:
         output = check_output(command, stderr=STDOUT).decode()
@@ -214,7 +213,9 @@ class TmdbSimpleAdapter():
         return movie.origin_country
 
     def movie_duration(self, movie):
-        return movie.runtime
+        """Result in integer
+        """
+        return int(movie.runtime)
 
     def movie_director_names(self, movie):
         movie = tmdb.Movies(movie.id)
@@ -263,7 +264,10 @@ def store_tmdb_apikey(apikey):
 # -- Pass 1: make json records and download default movie cover if required ---
 
 
-def compare_titles(title, movie, search_type):
+def compare_titles(title, movie):
+    """Compare user title with all titles associated with movie (main title,
+    original title and alternative titles).
+    """
     title = title.lower()
 
     # list of titles associated with movie
@@ -276,7 +280,13 @@ def compare_titles(title, movie, search_type):
 
     movie_id = movie["id"]
     movie_details = tmdb.Movies(movie_id)
-    for desc in movie_details.alternative_titles()['titles']:
+
+    try:
+        alternative_titles = movie_details.alternative_titles()['titles']
+    except requests.exceptions.HTTPError:
+        alternative_titles = []
+
+    for desc in alternative_titles:
         if desc['iso_3166_1'] in ('US',):
             title_list.append(desc['title'].lower())
 
@@ -284,29 +294,14 @@ def compare_titles(title, movie, search_type):
         title_list[index] = re.sub('[:.]', '', title_)
         title_list[index] = title_list[index].replace('  ', ' ')
 
-    # ic(title)
-    # ic(title_list)
-    # ic(title in title_list)
-
-    if title in title_list:
-        return True
-
-    if search_type == 'phrase':
-        return False
-
-    movie_title = movie_title.replace(':', '')
-    movie_title = movie_title.replace('.', '')
-    original_title = original_title.replace(':', '')
-    original_title = original_title.replace('.', '')
-
-    return movie_title == title or original_title == title
+    return title in title_list
 
 
 def get_tmdb_id(title: str, original_year: str, search_type='phrase', fullname=None) -> list:
     if search_type == 'phrase' and fullname:
         idfilename = os.path.splitext(fullname)[0] + '.id'
         if os.path.isfile(idfilename):
-            with open(idfilename) as f:
+            with open(idfilename, encoding='utf8') as f:
                 movie_id = f.read().strip()
                 return [movie_id]
 
@@ -317,10 +312,10 @@ def get_tmdb_id(title: str, original_year: str, search_type='phrase', fullname=N
     movie_ids = []
 
     for movie in search_results:
-        if compare_titles(title, movie, search_type) is False:
+        if compare_titles(title, movie) is False:
             continue
 
-        if not original_year:
+        if original_year == 'undefined':
             movie_ids.append(movie["id"])
             continue
 
@@ -354,7 +349,7 @@ def retrieve_movie_id(dirpath, barename) -> (str,str,list):
     """
     idfile = os.path.join(dirpath, barename + '.id')
     if os.path.isfile(idfile):
-        with open(idfile) as f:
+        with open(idfile, encoding='utf8') as f:
             tmdb_id = [f.readline()]
     else:
         tmdb_id = None
@@ -440,7 +435,7 @@ def create_minimal_record(dirpath, filename, name, year):
     record['height'] = height
 
     # set duration
-    record['runtime'] = get_duration(fullname) # TODO int ?
+    record['runtime'] = get_duration(fullname)
     return record
 
 
@@ -450,14 +445,14 @@ def create_record(dirpath, filename, name, year, ia, tmdb_id):
     movie = ia.get_movie(tmdb_id)
     if movie is None:
         print('Error: Unabled to retrieve information from tmdb:', tmdb_id)
-        return
+        return record
 
     # set movie information
     record['tmdb_id'] = ia.movie_id(movie)
     record['imdb_id'] = ia.movie_imdb_id(movie)
     record['title'] = ia.get_title(name, movie, strict_imdb=False)
     record['year'] = ia.movie_year(movie)
-    record['runtime'] = ia.movie_duration(movie)  # TODO int ?
+    record['runtime'] = ia.movie_duration(movie)
     record['director'] = ia.movie_director_names(movie)
     record['cast'] = ia.movie_cast_names(movie)
 
@@ -513,9 +508,9 @@ def create_missing_records(rep, forcejson=False):
             if forcejson:
                 with open(jsonname, encoding='utf-8') as f:
                     record = json.loads(f.read())
-                # TODO check
-                #if record['tmdb_id'] is None:
-                #    continue
+                # id unknown, ignore as assumed to be completed manually
+                if record['tmdb_id'] is None:
+                   continue
             else:
                 continue
 
@@ -533,12 +528,6 @@ def create_missing_records(rep, forcejson=False):
             print('-' * 40)
             record = create_minimal_record(dirpath, filename, name, year)
             warning = True
-        elif tmdb_id is None:
-            # TODO
-            assert 0
-            ic(name, 'not found')
-            record = create_minimal_record(dirpath, filename, name, year)
-            warning = True
         else:
             # movie found
             tmdb_id = list(tmdb_id)[0]
@@ -546,7 +535,7 @@ def create_missing_records(rep, forcejson=False):
             record = create_record(dirpath, filename, name, year, ia, tmdb_id)
 
         # save record
-        with open(jsonname, 'w') as f:
+        with open(jsonname, 'w', encoding='utf8') as f:
             json.dump(record, f, indent=4)
 
         # create default image if absent
@@ -555,7 +544,7 @@ def create_missing_records(rep, forcejson=False):
         if os.path.isfile(imagename) is False:
             extract_image_from_movie(moviename, imagename, size=300, delay=60)
 
-        pprint.pprint(record)
+        ic(record)
         print()
         # sys.exit(1)
         time.sleep(0.25)
@@ -613,7 +602,7 @@ def load_records(rep, forcethumb=False):
             record['title'] = barename
             record['year'] = 'undefined'
         else:
-            with open(jsonname) as f:
+            with open(jsonname, encoding='utf8') as f:
                 record = json.loads(f.read())
 
         update_movie_record(rep, movienum, dirpath, filename, barename, record, forcethumb)
@@ -630,22 +619,6 @@ def load_records(rep, forcethumb=False):
                 record['title_uniq'] = f"{record['title']} ({record['year']})"
 
     return records
-
-
-def relevant_cast_v1(record, actor_movies):
-    """
-    An actor is taken into account for a movie if:
-    - he appears in the p first actors in the cast list,
-    - or he appears in the q (q > p) first actors and he appears in at least one
-      other movie in the database.
-    """
-    p = 5
-    q = 10
-    cast = record['cast'][:p]
-    for actor in record['cast'][p:q]:
-        if len(actor_movies[actor]) >= 2:
-            cast.append(actor)
-    return cast
 
 
 def relevant_cast(record, records, actor_movies, yearmovie_num):
@@ -726,9 +699,6 @@ def make_year_page(rep, records, language, forcethumb):
     for record in records:
         if record['year'] is not None:
             if record['year'] == 'undefined':
-                pass
-            elif record['year'] == '':
-                ic(record['year'], record['title'])
                 pass
             elif isinstance(record['year'], str):
                 movies_by_year[int(record['year'])].append(record)
@@ -1115,7 +1085,7 @@ def regression_testing(rep):
     compare bak and new files
     when no difference between two files, remove bak file
     """
-    N = 10
+    N = 1000
     files = [
         'movies-vrac.htm',
         'movies-year.htm',
@@ -1126,11 +1096,20 @@ def regression_testing(rep):
         'movies-history.htm',
     ]
     files = [os.path.join(rep, '.gallery', _) for _ in files]
-    for index, (dirpath, filename, barename) in enumerate(movie_gen(rep)):
+    for index, (dirpath, _, barename) in enumerate(movie_gen(rep)):
         if index == N:
             break
         files.append(os.path.join(dirpath, barename + '.htm'))
         files.append(os.path.join(dirpath, barename + '.json'))
+
+    # temporary fix
+    if 0:
+        for file_ in files:
+            if os.path.isfile(file_) and os.path.isfile(file_ + '.bak'):
+                os.remove(file_)
+            if os.path.isfile(file_ + '.bak'):
+                os.rename(file_ + '.bak', file_)
+        return
 
     # rename to .bak
     for file_ in files:
@@ -1235,8 +1214,8 @@ def test_tmdb(*_):
 
 
 def test_search(titre):
-    titre = "12 Monkeys"
-    year = '1995'
+    titre = "Phantom Of The Paradise"
+    year = 'undefined'
     fullname = None
     print('Searching for', repr(titre), repr(year))
 
