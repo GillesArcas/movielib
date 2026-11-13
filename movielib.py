@@ -275,9 +275,6 @@ def compare_titles(title, movie):
 
     # list of titles associated with movie
     title_list = []
-    movie_title = movie["title"].lower()
-    original_title = movie["original_title"].lower()
-
     title_list.append(movie["title"].lower())
     title_list.append(movie["original_title"].lower())
 
@@ -300,48 +297,40 @@ def compare_titles(title, movie):
     return title in title_list
 
 
-def get_tmdb_id(title: str, original_year: str, search_type='phrase', fullname=None) -> list:
-    if search_type == 'phrase' and fullname:
-        idfilename = os.path.splitext(fullname)[0] + '.id'
-        if os.path.isfile(idfilename):
-            with open(idfilename, encoding='utf8') as f:
-                movie_id = f.read().strip()
-                return [movie_id]
-
-    search = tmdb.Search()
-    info = search.movie(query=title, search_type=search_type, language="us-US")
-    search_results = info.get('results', [])
-
-    movie_ids = []
-
-    for movie in search_results:
-        if compare_titles(title, movie) is False:
-            continue
-
-        if original_year == 'undefined':
-            movie_ids.append(movie["id"])
-            continue
-
+def compare_year(original_year, movie):
+    """Compare year with the min of all release years associated with movie
+    """
+    if original_year == 'undefined':
+        return True
+    else:
         movie_details = tmdb.Movies(movie["id"])
         releases = movie_details.release_dates()
 
-        dates = []
-
+        year_list = []
         for country in releases.get("results", []):
             for release in country.get("release_dates", []):
                 date = release.get("release_date", "")
                 if date:
-                    dates.append(date[:10])
+                    year_list.append(date[:4])
 
-        if dates and min(dates)[:4] == original_year:
-            movie_ids.append(movie["id"])
+        return year_list and min(year_list) == original_year
 
-    if movie_ids:
-        return movie_ids
-    elif search_type == 'phrase':
-        return get_tmdb_id(title, original_year, search_type='ngram')
-    else:
-        return []
+
+def get_tmdb_id(title, original_year) -> list:
+    for search_type in ('phrase', 'ngram'):
+        search = tmdb.Search()
+        info = search.movie(query=title, search_type=search_type, language="us-US")
+        search_results = info.get('results', [])
+
+        movie_ids = []
+        for movie in search_results:
+            if compare_titles(title, movie) and compare_year(original_year, movie):
+                movie_ids.append(movie["id"])
+
+        if movie_ids:
+            return movie_ids
+
+    return []
 
 
 def retrieve_movie_id(dirpath, barename) -> (str,str,list):
@@ -350,22 +339,19 @@ def retrieve_movie_id(dirpath, barename) -> (str,str,list):
     If an ID file exists, it has precedence over the ID possibly found in TMDb
     data.
     """
+    if match := re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename):
+        name = match[1].strip()
+        year = match[2]
+    else:
+        name = barename.strip()
+        year = 'undefined'
+
     idfile = os.path.join(dirpath, barename + '.id')
     if os.path.isfile(idfile):
         with open(idfile, encoding='utf8') as f:
             tmdb_id = [f.readline()]
     else:
-        tmdb_id = None
-
-    if re.search(r'\(\d\d\d\d\)\s*$', barename):
-        match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
-        name = match.group(1).strip()
-        year = match.group(2)
-        tmdb_id = tmdb_id or get_tmdb_id(name, year)
-    else:
-        name = barename.strip()
-        year = 'undefined'
-        tmdb_id = tmdb_id or get_tmdb_id(name, year)
+        tmdb_id = get_tmdb_id(name, year)
 
     return name, year, tmdb_id
 
@@ -513,7 +499,7 @@ def create_missing_records(rep, forcejson=False):
                     record = json.loads(f.read())
                 # id unknown, ignore as assumed to be completed manually
                 if record['tmdb_id'] is None:
-                   continue
+                    continue
             else:
                 continue
 
@@ -877,7 +863,6 @@ def make_storyboard(record):
 
     # very time consuming:
     # command = 'ffmpeg -i "%s" -vf fps=1/%d %s' % (moviefullname, step, imgname)
-    # os.system(command)
 
     command = 'ffmpeg -y -hide_banner -loglevel error -accurate_seek -ss %d -i "%s" -frames:v 1 %s'
     for index in range(1, 17):
@@ -1088,7 +1073,8 @@ def regression_testing(rep):
     compare bak and new files
     when no difference between two files, remove bak file
     """
-    N = 1000
+    N = 10      # number of tested movies
+    P = 1000    # fully tested movie
     files = [
         'movies-vrac.htm',
         'movies-year.htm',
@@ -1104,6 +1090,9 @@ def regression_testing(rep):
             break
         files.append(os.path.join(dirpath, barename + '.htm'))
         files.append(os.path.join(dirpath, barename + '.json'))
+        if index == P:
+            files.append(os.path.join(dirpath, barename + '.jpg'))
+            files.append(os.path.join(dirpath, barename + '.story.jpg'))
 
     # temporary fix
     if 0:
@@ -1219,7 +1208,6 @@ def test_tmdb(*_):
 def test_search(titre):
     titre = "Phantom Of The Paradise"
     year = 'undefined'
-    fullname = None
     print('Searching for', repr(titre), repr(year))
 
     tmdb.API_KEY = keyring.get_password('movielib', getpass.getuser())
@@ -1237,7 +1225,7 @@ def test_search(titre):
 
         print(f"ID : {movie_id} | Titre FR : {title_fr} | Titre Orig : {title_orig} ({release_year})")
 
-    print('get_tmdb_id', get_tmdb_id(titre, year, fullname=fullname))
+    print('get_tmdb_id', get_tmdb_id(titre, year))
 
 
 def test_title(titre):
@@ -1260,15 +1248,7 @@ def test_search_all(rep):
     found = 0
     for dirpath, filename, barename in movie_gen(rep):
         count += 1
-        if re.search(r'\(\d\d\d\d\)\s*$', barename):
-            match = re.match(r'\s*(.*)\s*\((\d\d\d\d)\)\s*$', barename)
-            name = match.group(1).strip()
-            year = match.group(2)
-        else:
-            name = barename.strip()
-            year = ''
-
-        movie_ids = get_tmdb_id(name, year, fullname=os.path.join(dirpath, filename))
+        name, year, movie_ids = retrieve_movie_id(dirpath, barename)
 
         if len(movie_ids) == 1:
             found +=1
@@ -1276,8 +1256,8 @@ def test_search_all(rep):
         elif len(movie_ids) == 0:
             print('%-10s' % 'Not found', name, year)
         else:
-            print('%-10s' % 'Ambiguous', name, year)
-        if count == 1000:
+            print('%-10s' % 'Ambiguous', name, year, movie_ids)
+        if count == 10:
             break
         time.sleep(0.25)
     print(count, found)
