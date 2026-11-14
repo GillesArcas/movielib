@@ -649,12 +649,6 @@ def escape_open_url(url):
     return url
 
 
-def urlencode(url):
-    url = url.replace('\\', '/')
-    url = url.replace(' ', '%20')
-    return url
-
-
 def make_gallery_page(pagename, rep, records, language, forcethumb, index, sorted_records, tags, caption, search=False):
     file_loader = jinja2.FileSystemLoader(os.path.dirname(__file__))
     env = jinja2.Environment(loader=file_loader)
@@ -931,14 +925,6 @@ def google_link(record):
     return f'href="javascript:window.open(\'{url}\', \'_top\')"'
 
 
-def relpath_to_menu(record):
-    return record['relpath_to_root'] + '.gallery/menu.htm'
-
-
-def relpath_to_icon(record):
-    return record['relpath_to_root'] + '.gallery/movies-icon.png'
-
-
 def relpath_to_movie(rep, records, record, yearmovie, yearmovie_num):
     """
     Relative path from movie to movie
@@ -999,7 +985,7 @@ def movie_record_html(rep, records, record, language, yearmovie_num, director_mo
         wikipedia_link=wikipedia_link(record),
         google_link=google_link(record),
         record=record,
-        icon=record['cover'],  # relpath_to_icon(record),
+        icon=record['cover'],
         path_to_gallery=record['relpath_to_root'] + '.gallery/',
         zip=zip,
         space_thousands=space_thousands,
