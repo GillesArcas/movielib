@@ -1192,14 +1192,14 @@ def test_tmdb(*_):
 
 
 def test_search(titre):
-    titre = "Phantom Of The Paradise"
-    year = 'undefined'
+    titre = 'School Of The Holy Beast'
+    titre = 'The Transgressor'
+    year = '1974'
     print('Searching for', repr(titre), repr(year))
 
     tmdb.API_KEY = keyring.get_password('movielib', getpass.getuser())
     search = tmdb.Search()
 
-    # Lancement de la requête
     info = search.movie(query=titre, search_type='phrase', language="us-US")
     search_results = info.get('results', [])
 
@@ -1208,6 +1208,11 @@ def test_search(titre):
         title_orig = movie["original_title"]
         movie_id = movie["id"]
         release_year = movie.get("release_date", "")[:4]
+        movie_details = tmdb.Movies(movie_id)
+        alternative_titles = movie_details.alternative_titles()['titles']
+        for desc in alternative_titles:
+            if desc['iso_3166_1'] in ('US',):
+                print(desc['title'])
 
         print(f"ID : {movie_id} | Titre FR : {title_fr} | Titre Orig : {title_orig} ({release_year})")
 
